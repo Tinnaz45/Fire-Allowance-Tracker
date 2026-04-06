@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '../hooks/useAuth'
-import { STATIONS } from '../lib/supabase'
 import { StationSelect } from '../components/UI'
 
 const PLATOONS = ['A', 'B', 'C', 'D', 'Z']

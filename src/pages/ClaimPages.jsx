@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useClaims } from '../hooks/useClaims'
-import { STATIONS, RATES } from '../lib/supabase'
+import { RATES } from '../lib/supabase'
 import { ClaimRow, ClaimDetailSheet, EmptyState, fmtAUD, StationSelect } from '../components/UI'
 import { useAuth } from '../hooks/useAuth'
 
