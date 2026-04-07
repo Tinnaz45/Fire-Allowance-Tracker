@@ -7,7 +7,7 @@ import DistrictStationSelect from '../components/DistrictStationSelect'
 
 const PLATOONS = ['A', 'B', 'C', 'D', 'Z']
 
-// ── SHARED FORM WRAPPER ───────────────────────────────────────
+// ── SHARED FORM WRAPPER ───────────────────────────────────────────────────────
 function FormCard({ title, children, onSubmit, submitting }) {
   return (
     <form className="card" onSubmit={onSubmit}>
@@ -25,7 +25,7 @@ function FormCard({ title, children, onSubmit, submitting }) {
   )
 }
 
-// ── CLAIM LIST SECTION ────────────────────────────────────────
+// ── CLAIM LIST SECTION ────────────────────────────────────────────────────────
 function ClaimList({ claims, type, table, markPaid, deleteClaim }) {
   const [selected, setSelected] = useState(null)
   const pending = claims.filter(c => c.status === 'Pending')
@@ -70,9 +70,9 @@ function ClaimList({ claims, type, table, markPaid, deleteClaim }) {
   )
 }
 
-// ─────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
 // RECALLS PAGE
-// ─────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
 export function RecallsPage() {
   const { recalls, addRecall, markPaid, deleteClaim } = useClaims()
   const { profile } = useAuth()
@@ -170,9 +170,9 @@ export function RecallsPage() {
   )
 }
 
-// ─────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
 // RETAIN PAGE
-// ─────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
 export function RetainPage() {
   const { retain, addRetain, markPaid, deleteClaim } = useClaims()
   const { profile } = useAuth()
@@ -262,14 +262,14 @@ export function RetainPage() {
   )
 }
 
-// ─────────────────────────────────────────────────────────────
-// STANDBY / M&D PAGE
-// ─────────────────────────────────────────────────────────────
-export function StandbyPage() {
+// ─────────────────────────────────────────────────────────────────────────────
+// SHARED STANDBY FORM (used by StandbyPage and MandPage)
+// ─────────────────────────────────────────────────────────────────────────────
+function StandbyForm({ claimType }) {
   const { standby, addStandby, markPaid, deleteClaim } = useClaims()
   const { profile } = useAuth()
   const [form, setForm] = useState({
-    date: '', standbyType: 'Standby', shift: 'Day',
+    date: '', standbyType: claimType, shift: 'Day',
     rosteredStnId: profile?.station_id || '', standbyStnId: '',
     arrived: '', distKm: '', notes: '', freeFromHome: 'no',
   })
@@ -282,6 +282,8 @@ export function StandbyPage() {
   const nightMealie = form.shift === 'Night' ? RATES.nightStandbyMealie : 0
   const estTotal = travel + nightMealie
 
+  const filteredClaims = standby.filter(c => c.standby_type === claimType)
+
   async function handleSubmit(e) {
     e.preventDefault(); setError('')
     setSubmitting(true)
@@ -291,13 +293,16 @@ export function StandbyPage() {
     setSubmitting(false)
   }
 
+  const label = claimType === 'Standby' ? 'standby' : 'M&D'
+  const stnLabel = claimType === 'Standby' ? 'Standby station' : 'M&D station'
+
   return (
     <div className="page">
       <div className="info-box" style={{ fontSize: '0.8125rem' }}>
         Distance is one-way — the app doubles it for the return trip.
       </div>
 
-      <FormCard title="New standby / M&D claim" onSubmit={handleSubmit} submitting={submitting}>
+      <FormCard title={`New ${label} claim`} onSubmit={handleSubmit} submitting={submitting}>
         {error && <div className="auth-error">{error}</div>}
 
         <div className="grid-2">
@@ -306,23 +311,23 @@ export function StandbyPage() {
             <input type="date" value={form.date} onChange={set('date')} required />
           </div>
           <div className="field">
-            <label>Type</label>
-            <select value={form.standbyType} onChange={set('standbyType')}>
-              <option>Standby</option><option>M&D</option>
+            <label>Shift</label>
+            <select value={form.shift} onChange={set('shift')}>
+              <option>Day</option><option>Night</option>
             </select>
           </div>
         </div>
 
         <div className="grid-2">
           <div className="field">
-            <label>Shift</label>
-            <select value={form.shift} onChange={set('shift')}>
-              <option>Day</option><option>Night</option>
-            </select>
-          </div>
-          <div className="field">
             <label>Arrival time (HHMM)</label>
             <input type="text" value={form.arrived} onChange={set('arrived')} placeholder="0905" maxLength={4} />
+          </div>
+          <div className="field">
+            <label>Free from home?</label>
+            <select value={form.freeFromHome} onChange={set('freeFromHome')}>
+              <option value="no">No</option><option value="yes">Yes</option>
+            </select>
           </div>
         </div>
 
@@ -332,22 +337,14 @@ export function StandbyPage() {
           onChange={(val) => setForm(f => ({ ...f, rosteredStnId: val }))}
         />
         <DistrictStationSelect
-          label="Standby / M&D station"
+          label={stnLabel}
           stationId={form.standbyStnId ? Number(form.standbyStnId) : ''}
           onChange={(val) => setForm(f => ({ ...f, standbyStnId: val }))}
         />
 
-        <div className="grid-2">
-          <div className="field">
-            <label>Distance to standby stn (km, one way)</label>
-            <input type="number" value={form.distKm} onChange={set('distKm')} placeholder="0" min="0" step="0.5" />
-          </div>
-          <div className="field">
-            <label>Free from home?</label>
-            <select value={form.freeFromHome} onChange={set('freeFromHome')}>
-              <option value="no">No</option><option value="yes">Yes</option>
-            </select>
-          </div>
+        <div className="field">
+          <label>Distance to {label} stn (km, one way)</label>
+          <input type="number" value={form.distKm} onChange={set('distKm')} placeholder="0" min="0" step="0.5" />
         </div>
 
         <div className="field">
@@ -364,14 +361,22 @@ export function StandbyPage() {
         )}
       </FormCard>
 
-      <ClaimList claims={standby} type="Standby" table="standby" markPaid={markPaid} deleteClaim={deleteClaim} />
+      <ClaimList claims={filteredClaims} type={claimType} table="standby" markPaid={markPaid} deleteClaim={deleteClaim} />
     </div>
   )
 }
 
-// ─────────────────────────────────────────────────────────────
+export function StandbyPage() {
+  return <StandbyForm claimType="Standby" />
+}
+
+export function MandPage() {
+  return <StandbyForm claimType="M&D" />
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // SPOILT / DELAYED PAGE
-// ─────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
 export function SpoiltPage() {
   const { spoilt, addSpoilt, markPaid, deleteClaim } = useClaims()
   const { profile } = useAuth()
