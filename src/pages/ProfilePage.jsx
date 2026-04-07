@@ -178,3 +178,285 @@ export function RetainPage() {
   const { profile } = useAuth()
   const [form, setForm] = useState({
     date: '', stationId: profile?.station_id || '',
+    platoon: profile?.platoon || 'C', shift: 'Night',
+    bookedOffTime: '', rmssNumber: '', isFirecall: 'no', overnightCash: '',
+  })
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState('')
+
+  const set = (k) => (e) => setForm(f => ({ ...f, [k]: e.target.value }))
+  const retainAmt = form.shift === 'Night' ? RATES.retainNight : RATES.retainDay
+
+  async function handleSubmit(e) {
+    e.preventDefault(); setError('')
+    setSubmitting(true)
+    const { error } = await addRetain(form)
+    if (error) setError(error.message)
+    else setForm(f => ({ ...f, date: '', bookedOffTime: '', rmssNumber: '', isFirecall: 'no', overnightCash: '' }))
+    setSubmitting(false)
+  }
+
+  return (
+    <div className="page">
+      <FormCard title="New retain claim" onSubmit={handleSubmit} submitting={submitting}>
+        {error && <div className="auth-error">{error}</div>}
+
+        <div className="grid-2">
+          <div className="field">
+            <label>Date</label>
+            <input type="date" value={form.date} onChange={set('date')} required />
+          </div>
+          <div className="field">
+            <label>Shift</label>
+            <select value={form.shift} onChange={set('shift')}>
+              <option>Day</option><option>Night</option>
+            </select>
+          </div>
+        </div>
+
+        <DistrictStationSelect
+          label="Station"
+          stationId={form.stationId ? Number(form.stationId) : ''}
+          onChange={(val) => setForm(f => ({ ...f, stationId: val }))}
+        />
+
+        <div className="grid-2">
+          <div className="field">
+            <label>Platoon</label>
+            <select value={form.platoon} onChange={set('platoon')}>
+              {PLATOONS.map(p => <option key={p}>{p}</option>)}
+            </select>
+          </div>
+          <div className="field">
+            <label>Booked off time (HHMM)</label>
+            <input type="text" value={form.bookedOffTime} onChange={set('bookedOffTime')} placeholder="1905" maxLength={4} />
+          </div>
+        </div>
+
+        <div className="field">
+          <label>RMSS / call number</label>
+          <input type="text" value={form.rmssNumber} onChange={set('rmssNumber')} placeholder="e.g. 250700597" />
+        </div>
+
+        <div className="grid-2">
+          <div className="field">
+            <label>Retained due to firecall?</label>
+            <select value={form.isFirecall} onChange={set('isFirecall')}>
+              <option value="no">No</option>
+              <option value="yes">Yes — firecall number above</option>
+            </select>
+          </div>
+          <div className="field">
+            <label>Overnight petty cash ($)</label>
+            <input type="number" value={form.overnightCash} onChange={set('overnightCash')} placeholder="0.00" step="0.01" min="0" />
+          </div>
+        </div>
+
+        <div className="info-box">
+          Retain pay ({form.shift}): <strong>{fmtAUD(retainAmt)}</strong>
+        </div>
+      </FormCard>
+
+      <ClaimList claims={retain} type="Retain" table="retain" markPaid={markPaid} deleteClaim={deleteClaim} />
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────
+// STANDBY / M&D PAGE
+// ─────────────────────────────────────────────────────────────
+export function StandbyPage() {
+  const { standby, addStandby, markPaid, deleteClaim } = useClaims()
+  const { profile } = useAuth()
+  const [form, setForm] = useState({
+    date: '', standbyType: 'Standby', shift: 'Day',
+    rosteredStnId: profile?.station_id || '', standbyStnId: '',
+    arrived: '', distKm: '', notes: '', freeFromHome: 'no',
+  })
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState('')
+
+  const set = (k) => (e) => setForm(f => ({ ...f, [k]: e.target.value }))
+  const km = parseFloat(form.distKm) || 0
+  const travel = +(km * 2 * RATES.kmRate).toFixed(2)
+  const nightMealie = form.shift === 'Night' ? RATES.nightStandbyMealie : 0
+  const estTotal = travel + nightMealie
+
+  async function handleSubmit(e) {
+    e.preventDefault(); setError('')
+    setSubmitting(true)
+    const { error } = await addStandby(form)
+    if (error) setError(error.message)
+    else setForm(f => ({ ...f, date: '', standbyStnId: '', arrived: '', distKm: '', notes: '' }))
+    setSubmitting(false)
+  }
+
+  return (
+    <div className="page">
+      <div className="info-box" style={{ fontSize: '0.8125rem' }}>
+        Distance is one-way — the app doubles it for the return trip.
+      </div>
+
+      <FormCard title="New standby / M&D claim" onSubmit={handleSubmit} submitting={submitting}>
+        {error && <div className="auth-error">{error}</div>}
+
+        <div className="grid-2">
+          <div className="field">
+            <label>Date</label>
+            <input type="date" value={form.date} onChange={set('date')} required />
+          </div>
+          <div className="field">
+            <label>Type</label>
+            <select value={form.standbyType} onChange={set('standbyType')}>
+              <option>Standby</option><option>M&D</option>
+            </select>
+          </div>
+        </div>
+
+        <div className="grid-2">
+          <div className="field">
+            <label>Shift</label>
+            <select value={form.shift} onChange={set('shift')}>
+              <option>Day</option><option>Night</option>
+            </select>
+          </div>
+          <div className="field">
+            <label>Arrival time (HHMM)</label>
+            <input type="text" value={form.arrived} onChange={set('arrived')} placeholder="0905" maxLength={4} />
+          </div>
+        </div>
+
+        <DistrictStationSelect
+          label="Rostered station"
+          stationId={form.rosteredStnId ? Number(form.rosteredStnId) : ''}
+          onChange={(val) => setForm(f => ({ ...f, rosteredStnId: val }))}
+        />
+        <DistrictStationSelect
+          label="Standby / M&D station"
+          stationId={form.standbyStnId ? Number(form.standbyStnId) : ''}
+          onChange={(val) => setForm(f => ({ ...f, standbyStnId: val }))}
+        />
+
+        <div className="grid-2">
+          <div className="field">
+            <label>Distance to standby stn (km, one way)</label>
+            <input type="number" value={form.distKm} onChange={set('distKm')} placeholder="0" min="0" step="0.5" />
+          </div>
+          <div className="field">
+            <label>Free from home?</label>
+            <select value={form.freeFromHome} onChange={set('freeFromHome')}>
+              <option value="no">No</option><option value="yes">Yes</option>
+            </select>
+          </div>
+        </div>
+
+        <div className="field">
+          <label>Purpose / notes</label>
+          <input type="text" value={form.notes} onChange={set('notes')} placeholder="e.g. Series 1 Pumper Course" />
+        </div>
+
+        {(km > 0 || form.shift === 'Night') && (
+          <div className="info-box">
+            Est. travel: {fmtAUD(travel)}
+            {nightMealie > 0 && ` + night mealie: ${fmtAUD(nightMealie)}`}
+            {' = '}<strong>{fmtAUD(estTotal)}</strong>
+          </div>
+        )}
+      </FormCard>
+
+      <ClaimList claims={standby} type="Standby" table="standby" markPaid={markPaid} deleteClaim={deleteClaim} />
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────
+// SPOILT / DELAYED PAGE
+// ─────────────────────────────────────────────────────────────
+export function SpoiltPage() {
+  const { spoilt, addSpoilt, markPaid, deleteClaim } = useClaims()
+  const { profile } = useAuth()
+  const [form, setForm] = useState({
+    date: '', mealType: 'Spoilt', shift: 'Day',
+    stationId: profile?.station_id || '', platoon: profile?.platoon || 'C',
+    callTime: '', callNumber: '', claimStnId: profile?.station_id || '',
+  })
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState('')
+
+  const set = (k) => (e) => setForm(f => ({ ...f, [k]: e.target.value }))
+
+  async function handleSubmit(e) {
+    e.preventDefault(); setError('')
+    setSubmitting(true)
+    const { error } = await addSpoilt(form)
+    if (error) setError(error.message)
+    else setForm(f => ({ ...f, date: '', callTime: '', callNumber: '' }))
+    setSubmitting(false)
+  }
+
+  return (
+    <div className="page">
+      <div className="info-box" style={{ fontSize: '0.8125rem' }}>
+        <strong>Meal windows</strong> &nbsp;·&nbsp; Day: 1200–1300 &nbsp;·&nbsp; Night: 1830–1930
+        <br />Current rate: <strong>{fmtAUD(RATES.spoiltMeal)}</strong>
+      </div>
+
+      <FormCard title="New spoilt / delayed meal claim" onSubmit={handleSubmit} submitting={submitting}>
+        {error && <div className="auth-error">{error}</div>}
+
+        <div className="grid-2">
+          <div className="field">
+            <label>Date</label>
+            <input type="date" value={form.date} onChange={set('date')} required />
+          </div>
+          <div className="field">
+            <label>Type</label>
+            <select value={form.mealType} onChange={set('mealType')}>
+              <option>Spoilt</option><option>Delayed</option>
+            </select>
+          </div>
+        </div>
+
+        <div className="grid-2">
+          <div className="field">
+            <label>Shift</label>
+            <select value={form.shift} onChange={set('shift')}>
+              <option>Day</option><option>Night</option>
+            </select>
+          </div>
+          <div className="field">
+            <label>Platoon</label>
+            <select value={form.platoon} onChange={set('platoon')}>
+              {PLATOONS.map(p => <option key={p}>{p}</option>)}
+            </select>
+          </div>
+        </div>
+
+        <DistrictStationSelect
+          label="Station (where meal was spoilt)"
+          stationId={form.stationId ? Number(form.stationId) : ''}
+          onChange={(val) => setForm(f => ({ ...f, stationId: val }))}
+        />
+
+        <div className="grid-2">
+          <div className="field">
+            <label>Call / incident time (HHMM)</label>
+            <input type="text" value={form.callTime} onChange={set('callTime')} placeholder="1245" maxLength={4} />
+          </div>
+          <div className="field">
+            <label>Incident / call number</label>
+            <input type="text" value={form.callNumber} onChange={set('callNumber')} placeholder="e.g. 28963" />
+          </div>
+        </div>
+
+        <DistrictStationSelect
+          label="Claim station (petty cash)"
+          stationId={form.claimStnId ? Number(form.claimStnId) : ''}
+          onChange={(val) => setForm(f => ({ ...f, claimStnId: val }))}
+        />
+      </FormCard>
+
+      <ClaimList claims={spoilt} type="Spoilt" table="spoilt" markPaid={markPaid} deleteClaim={deleteClaim} />
+    </div>
+  )
+}
