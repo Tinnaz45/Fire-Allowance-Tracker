@@ -92,11 +92,13 @@ export function ProfilePage() {
             />
           </div>
 
-          <DistrictStationSelect
-            label="Home station"
-            stationId={form.station_id ? Number(form.station_id) : ''}
-            onChange={(val) => setForm(f => ({ ...f, station_id: val }))}
-          />
+          <div className="grid-2">
+            <DistrictStationSelect
+              label="Home station"
+              stationId={form.station_id ? Number(form.station_id) : ''}
+              onChange={(val) => setForm(f => ({ ...f, station_id: val }))}
+            />
+          </div>
 
           <div className="grid-2">
             <div className="field">
