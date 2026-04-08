@@ -180,6 +180,12 @@ p  { color: var(--text-2); }
   padding-right: 36px;
 }
 
+/* Platoon colours */
+.field select.platoon-a { background-color: rgba(239, 68,  68,  0.28); }
+.field select.platoon-b { background-color: rgba(59,  130, 246, 0.28); }
+.field select.platoon-c { background-color: rgba(34,  197, 94,  0.28); }
+.field select.platoon-d { background-color: rgba(234, 179, 8,   0.28); }
+
 .field input::placeholder,
 .field textarea::placeholder { color: var(--text-3); }
 

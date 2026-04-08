@@ -103,7 +103,7 @@ export function ProfilePage() {
           <div className="grid-2">
             <div className="field">
               <label>Platoon</label>
-              <select value={form.platoon} onChange={set('platoon')}>
+              <select value={form.platoon} onChange={set('platoon')} className={`platoon-${form.platoon?.toLowerCase()}`}>
                 {PLATOONS.map(p => <option key={p}>{p}</option>)}
               </select>
             </div>
