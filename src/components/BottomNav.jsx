@@ -6,6 +6,7 @@ export default function BottomNav({ active, onChange }) {
     { key: 'standby', label: 'Standby', icon: StandbyIcon },
     { key: 'mand', label: 'M&D', icon: MandIcon },
     { key: 'spoilt', label: 'Meals', icon: MealIcon },
+    { key: 'stations', label: 'Stations', icon: StationsIcon },
     { key: 'profile', label: 'Profile', icon: ProfileIcon },
   ]
 
@@ -77,6 +78,16 @@ function MealIcon() {
     <svg viewBox="0 0 24 24" {...s}>
       <path d="M18 8h1a4 4 0 0 1 0 8h-1" /><path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z" />
       <line x1="6" y1="1" x2="6" y2="4" /><line x1="10" y1="1" x2="10" y2="4" /><line x1="14" y1="1" x2="14" y2="4" />
+    </svg>
+  )
+}
+
+function StationsIcon() {
+  return (
+    <svg viewBox="0 0 24 24" {...s}>
+      <polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6" />
+      <line x1="8" y1="2" x2="8" y2="18" />
+      <line x1="16" y1="6" x2="16" y2="22" />
     </svg>
   )
 }

@@ -138,6 +138,22 @@ alter table public.spoilt enable row level security;
 create policy "Users manage own spoilt" on public.spoilt for all using (auth.uid() = user_id);
 
 
+-- STATION DISTANCES (cached driving distances between stations, refreshed annually)
+create table if not exists public.station_distances (
+  from_station_id integer not null,
+  to_station_id   integer not null,
+  distance_m      integer not null,
+  duration_s      integer not null,
+  calculated_year integer not null,
+  primary key (from_station_id, to_station_id)
+);
+
+alter table public.station_distances enable row level security;
+create policy "Anyone can read station distances"        on public.station_distances for select using (true);
+create policy "Authenticated users can insert distances" on public.station_distances for insert with check (auth.role() = 'authenticated');
+create policy "Authenticated users can update distances" on public.station_distances for update using (auth.role() = 'authenticated');
+
+
 -- UPDATED_AT trigger (reusable)
 create or replace function public.set_updated_at()
 returns trigger language plpgsql as $$

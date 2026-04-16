@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__claude_ai_Supabase__list_projects",
+      "mcp__claude_ai_Supabase__apply_migration",
+      "Bash(git add:*)",
+      "Bash(git commit -m ':*)",
+      "Bash(git push:*)",
+      "WebFetch(domain:docs.google.com)",
+      "WebFetch(domain:doc-08-1g-sheets.googleusercontent.com)",
+      "Bash(curl -s \"https://docs.google.com/spreadsheets/d/1_NO-TyrHCsGbkk4hzPHrmKNg0Kfg0xN7Ot5IalNR8GQ/gviz/tq?tqx=out:csv&sheet=Recalls\")",
+      "WebFetch(domain:drive.google.com)",
+      "WebFetch(domain:drive.usercontent.google.com)",
+      "WebFetch(domain:www.fwc.gov.au)",
+      "WebSearch"
+    ]
+  }
+}

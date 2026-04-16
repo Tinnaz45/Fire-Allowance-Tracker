@@ -5,6 +5,7 @@ import AuthPage from './pages/AuthPage'
 import Dashboard from './pages/Dashboard'
 import { RecallsPage, RetainPage, StandbyPage, MandPage, SpoiltPage } from './pages/ClaimPages'
 import { ProfilePage } from './pages/ProfilePage'
+import { StationsPage } from './pages/StationsPage'
 import BottomNav from './components/BottomNav'
 import { LoadingScreen } from './components/UI'
 import './styles/global.css'
@@ -16,6 +17,7 @@ const PAGE_TITLES = {
   standby: 'Standby',
   mand: 'M&D',
   spoilt: 'Spoilt / Delayed',
+  stations: 'Stations',
   profile: 'Profile',
 }
 
@@ -33,6 +35,7 @@ function AppShell() {
     standby: <StandbyPage />,
     mand: <MandPage />,
     spoilt: <SpoiltPage />,
+    stations: <StationsPage />,
     profile: <ProfilePage />,
   }
 
