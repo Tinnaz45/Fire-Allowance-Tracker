@@ -1,113 +1,13 @@
 import { useState } from 'react'
 import { useClaims } from '../hooks/useClaims'
-import { RATES } from '../lib/supabase'
-import { ClaimRow, ClaimDetailSheet, EmptyState, fmtAUD } from '../components/UI'
 import { useAuth } from '../hooks/useAuth'
+import ClaimList from '../components/ClaimList'
 import DistrictStationSelect from '../components/DistrictStationSelect'
+import { fmtAUD, RATES } from '../lib/utils'
 
-const PLATOONS = ['A', 'B', 'C', 'D', 'Z']
-
-// ✅ CENTRAL LABEL MAP (FIXED)
-const LABELS = {
-  Standby: {
-    title: 'Standby',
-    station: 'Standby station',
-  },
-  'M&D': {
-    title: 'Muster & Dismiss',
-    station: 'Muster & Dismiss station',
-  }
-}
-
-// ── SHARED FORM WRAPPER ───────────────────────────────────────────────────────
-function FormCard({ title, children, onSubmit, submitting }) {
-  return (
-    <form className="card" onSubmit={onSubmit}>
-      <div className="card-header">
-        <h3>{title}</h3>
-      </div>
-
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-        {children}
-
-        <button className="btn btn-primary btn-full" type="submit" disabled={submitting}>
-          {submitting
-            ? <span className="spinner" style={{ width: 16, height: 16, borderWidth: 2 }} />
-            : 'Save claim'
-          }
-        </button>
-      </div>
-    </form>
-  )
-}
-
-// ── CLAIM LIST SECTION ────────────────────────────────────────────────────────
-function ClaimList({ claims, type, table, markPaid, deleteClaim }) {
-  const [selected, setSelected] = useState(null)
-
-  const pending = claims.filter(c => c.status === 'Pending')
-
-  const pendingAmt = pending.reduce((s, c) => {
-    const a = type === 'Spoilt' ? c.meal_amount : c.total_amount
-    return s + (a || 0)
-  }, 0)
-
-  const displayType = LABELS[type]?.title || type
-
-  return (
-    <>
-      {pendingAmt > 0 && (
-        <div className="amount-bar">
-          <span className="amount-bar-label">
-            Pending {displayType.toLowerCase()} total
-          </span>
-          <span className="amount-bar-value">{fmtAUD(pendingAmt)}</span>
-        </div>
-      )}
-
-      <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-        <div className="card-header" style={{ padding: '12px 16px' }}>
-          <h3>{displayType} claims</h3>
-          <span className="badge badge-gray">{claims.length}</span>
-        </div>
-
-        {claims.length > 0
-          ? claims.map(c => (
-              <ClaimRow
-                key={c.id}
-                claim={c}
-                type={displayType}
-                onClick={() => setSelected(c)}
-              />
-            ))
-          : <EmptyState icon="📋" message={`No ${displayType.toLowerCase()} claims yet.`} />
-        }
-      </div>
-
-      {selected && (
-        <ClaimDetailSheet
-          claim={selected}
-          type={displayType}
-          table={table}
-          onClose={() => setSelected(null)}
-          onMarkPaid={markPaid}
-          onDelete={deleteClaim}
-        />
-      )}
-    </>
-  )
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// SHARED STANDBY FORM
-// ─────────────────────────────────────────────────────────────────────────────
 function StandbyForm({ claimType }) {
   const { standby, addStandby, markPaid, deleteClaim } = useClaims()
   const { profile } = useAuth()
-
-  // ✅ FIXED LABEL LOGIC
-  const label = LABELS[claimType]?.title || claimType
-  const stnLabel = LABELS[claimType]?.station || `${claimType} station`
 
   const [form, setForm] = useState({
     date: '',
@@ -118,7 +18,7 @@ function StandbyForm({ claimType }) {
     arrived: '',
     distKm: '',
     notes: '',
-    freeFromHome: 'no',
+    freeFromHome: 'no'
   })
 
   const [submitting, setSubmitting] = useState(false)
@@ -126,7 +26,7 @@ function StandbyForm({ claimType }) {
 
   const set = (k) => (e) => setForm(f => ({ ...f, [k]: e.target.value }))
 
-  const km = parseFloat(form.distKm) || 0
+  const km = parseFloat(form.distKm || 0)
   const travel = +(km * 2 * RATES.kmRate).toFixed(2)
   const nightMealie = form.shift === 'Night' ? RATES.nightStandbyMealie : 0
   const estTotal = travel + nightMealie
@@ -139,7 +39,6 @@ function StandbyForm({ claimType }) {
     setSubmitting(true)
 
     const { error } = await addStandby(form)
-
     if (error) {
       setError(error.message)
     } else {
@@ -156,17 +55,30 @@ function StandbyForm({ claimType }) {
     setSubmitting(false)
   }
 
+  // 🔥 FIXED LABEL MAP
+  const labelMap = {
+    Standby: 'Standby',
+    'M&D': 'Muster & Dismiss'
+  }
+
+  const label = labelMap[claimType] || claimType
+
+  const stnLabelMap = {
+    Standby: 'Standby station',
+    'M&D': 'Muster & Dismiss station'
+  }
+
+  const stnLabel = stnLabelMap[claimType] || 'Station'
+
   return (
     <div className="page">
       <div className="info-box" style={{ fontSize: '0.8125rem' }}>
-        Distance is one-way — the app doubles it for the return trip.
+        Distance is one-way – the app doubles it for the return trip.
       </div>
 
-      <FormCard
-        title={`New ${label} Claim`}
-        onSubmit={handleSubmit}
-        submitting={submitting}
-      >
+      <form className="card" onSubmit={handleSubmit}>
+        <h2>New {label} claim</h2>
+
         {error && <div className="auth-error">{error}</div>}
 
         <div className="grid-2">
@@ -191,7 +103,6 @@ function StandbyForm({ claimType }) {
               type="text"
               value={form.arrived}
               onChange={set('arrived')}
-              placeholder="0905"
               maxLength={4}
             />
           </div>
@@ -223,7 +134,6 @@ function StandbyForm({ claimType }) {
             type="number"
             value={form.distKm}
             onChange={set('distKm')}
-            placeholder="0"
             min="0"
             step="0.5"
           />
@@ -242,11 +152,15 @@ function StandbyForm({ claimType }) {
         {(km > 0 || form.shift === 'Night') && (
           <div className="info-box">
             Est. travel: {fmtAUD(travel)}
-            {nightMealie > 0 && ` + night mealie: ${fmtAUD(nightMealie)}`}
+            {nightMealie > 0 && <> + night mealie: {fmtAUD(nightMealie)}</>}
             {' = '}<strong>{fmtAUD(estTotal)}</strong>
           </div>
         )}
-      </FormCard>
+
+        <button className="btn-primary" disabled={submitting}>
+          Save claim
+        </button>
+      </form>
 
       <ClaimList
         claims={filteredClaims}
@@ -259,12 +173,12 @@ function StandbyForm({ claimType }) {
   )
 }
 
-// ── PAGES ─────────────────────────────────────────────────────────────────────
+// PAGES
 export function StandbyPage() {
   return <StandbyForm claimType="Standby" />
 }
 
-// ✅ KEEP THIS (DO NOT CHANGE)
+// ✅ KEEP THIS EXACTLY (internal value only)
 export function MandPage() {
   return <StandbyForm claimType="M&D" />
 }
