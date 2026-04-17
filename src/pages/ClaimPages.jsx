@@ -2,7 +2,13 @@ import { useState } from 'react'
 import { useClaims } from '../hooks/useClaims'
 import { useAuth } from '../hooks/useAuth'
 import DistrictStationSelect from '../components/DistrictStationSelect'
-import { fmtAUD, RATES } from '../lib/utils'
+
+// Inline replacements (no external utils needed)
+const fmtAUD = (n) => `$${Number(n || 0).toFixed(2)}`
+const RATES = {
+  kmRate: 0.78,
+  nightStandbyMealie: 35
+}
 
 const LABELS = {
   Standby: {
