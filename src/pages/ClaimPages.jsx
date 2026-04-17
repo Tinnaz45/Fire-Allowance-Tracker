@@ -1,9 +1,19 @@
 import { useState } from 'react'
 import { useClaims } from '../hooks/useClaims'
 import { useAuth } from '../hooks/useAuth'
-import ClaimList from '../components/ClaimList'
 import DistrictStationSelect from '../components/DistrictStationSelect'
 import { fmtAUD, RATES } from '../lib/utils'
+
+const LABELS = {
+  Standby: {
+    title: 'Standby',
+    station: 'Standby station',
+  },
+  'M&D': {
+    title: 'Muster & Dismiss',
+    station: 'Muster & Dismiss station',
+  }
+}
 
 function StandbyForm({ claimType }) {
   const { standby, addStandby, markPaid, deleteClaim } = useClaims()
@@ -26,6 +36,9 @@ function StandbyForm({ claimType }) {
 
   const set = (k) => (e) => setForm(f => ({ ...f, [k]: e.target.value }))
 
+  const label = LABELS[claimType]?.title || claimType
+  const stnLabel = LABELS[claimType]?.station || 'Station'
+
   const km = parseFloat(form.distKm || 0)
   const travel = +(km * 2 * RATES.kmRate).toFixed(2)
   const nightMealie = form.shift === 'Night' ? RATES.nightStandbyMealie : 0
@@ -39,6 +52,7 @@ function StandbyForm({ claimType }) {
     setSubmitting(true)
 
     const { error } = await addStandby(form)
+
     if (error) {
       setError(error.message)
     } else {
@@ -54,21 +68,6 @@ function StandbyForm({ claimType }) {
 
     setSubmitting(false)
   }
-
-  // 🔥 FIXED LABEL MAP
-  const labelMap = {
-    Standby: 'Standby',
-    'M&D': 'Muster & Dismiss'
-  }
-
-  const label = labelMap[claimType] || claimType
-
-  const stnLabelMap = {
-    Standby: 'Standby station',
-    'M&D': 'Muster & Dismiss station'
-  }
-
-  const stnLabel = stnLabelMap[claimType] || 'Station'
 
   return (
     <div className="page">
@@ -161,24 +160,14 @@ function StandbyForm({ claimType }) {
           Save claim
         </button>
       </form>
-
-      <ClaimList
-        claims={filteredClaims}
-        type={claimType}
-        table="standby"
-        markPaid={markPaid}
-        deleteClaim={deleteClaim}
-      />
     </div>
   )
 }
 
-// PAGES
 export function StandbyPage() {
   return <StandbyForm claimType="Standby" />
 }
 
-// ✅ KEEP THIS EXACTLY (internal value only)
 export function MandPage() {
   return <StandbyForm claimType="M&D" />
 }
