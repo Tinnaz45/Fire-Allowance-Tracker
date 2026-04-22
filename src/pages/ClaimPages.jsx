@@ -300,7 +300,7 @@ export function SpoiltPage() {
     setLoading(false)
     if (!error) {
       setSuccess(true)
-      setForm({ date: today(), mealType: 'Dinner', shift: 'Day', platoon: '', stationId: '', claimStnId: '', callTime: '', callNumber: '' })
+      setForm({ date: today(), mealType: 'Spoilt', shift: 'Day', platoon: '', stationId: '', claimStnId: '', callTime: '', callNumber: '' })
     } else {
       alert('Error: ' + error.message)
     }
