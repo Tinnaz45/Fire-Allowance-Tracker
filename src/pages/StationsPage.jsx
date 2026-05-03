@@ -149,3 +149,5 @@ export function StationsPage() {
     </div>
   )
 }
+
+export default function StationsPageIndex() { return null }
