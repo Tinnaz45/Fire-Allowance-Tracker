@@ -133,3 +133,5 @@ export function ProfilePage() {
     </div>
   )
 }
+
+export default function ProfilePageIndex() { return null }
