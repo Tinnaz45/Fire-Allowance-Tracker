@@ -9,6 +9,12 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
+    // Guard: supabase is null when env vars are missing (e.g. during build)
+    if (!supabase) {
+      setLoading(false)
+      return
+    }
+
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session)
       if (session) fetchProfile(session.user.id)
@@ -25,6 +31,7 @@ export function AuthProvider({ children }) {
   }, [])
 
   async function fetchProfile(userId) {
+    if (!supabase) return
     const { data } = await supabase
       .from('profiles')
       .select('*')
@@ -35,6 +42,7 @@ export function AuthProvider({ children }) {
   }
 
   async function updateProfile(updates) {
+    if (!supabase) return { data: null, error: new Error('Supabase not configured') }
     const { data, error } = await supabase
       .from('profiles')
       .update(updates)
@@ -46,18 +54,22 @@ export function AuthProvider({ children }) {
   }
 
   async function signIn(email, password) {
+    if (!supabase) return { error: new Error('Supabase not configured') }
     return supabase.auth.signInWithPassword({ email, password })
   }
 
   async function signUp(email, password) {
+    if (!supabase) return { error: new Error('Supabase not configured') }
     return supabase.auth.signUp({ email, password })
   }
 
   async function resetPassword(email) {
+    if (!supabase) return { error: new Error('Supabase not configured') }
     return supabase.auth.resetPasswordForEmail(email)
   }
 
   async function signOut() {
+    if (!supabase) return
     await supabase.auth.signOut()
   }
 
