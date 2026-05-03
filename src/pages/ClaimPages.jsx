@@ -344,3 +344,5 @@ export function SpoiltPage() {
     </div>
   )
 }
+
+export default function ClaimPagesIndex() { return null }
