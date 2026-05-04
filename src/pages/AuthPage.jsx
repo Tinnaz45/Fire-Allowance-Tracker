@@ -17,37 +17,31 @@ export default function AuthPage() {
     setSuccess('')
   }
 
-  const handleSubmit = async (e) => {
-    e.preventDefault()
-    setLoading(true)
-    setError(null)
-    setSuccess('')
-
+  async function handleSubmit(e) {
+    e.preventDefault();
+    setError("");
+    setSuccess("");
     try {
       if (mode === "signup") {
         const { data, error } = await supabase.auth.signUp({
           email,
           password,
-        })
-        if (error) {
-          setError(error.message)
-          return
-        }
-        // SUCCESS CASE (even if no session — email confirmation pending)
+        });
+        if (error) throw error;
         if (data?.user) {
-          setError(null)
-          setSuccess("Check your email to confirm your account")
-          return
+          setSuccess("Check your email to confirm your account");
+        } else {
+          setError("Signup failed unexpectedly");
         }
-        // fallback
-        setError("Signup failed unexpectedly")
-      } else {
-        await signIn(email, password)
+      } else if (mode === "signin") {
+        await signIn(email, password);
+      } else if (mode === "forgot") {
+        const { error } = await supabase.auth.resetPasswordForEmail(email);
+        if (error) throw error;
+        setSuccess("Password reset email sent");
       }
     } catch (err) {
-      setError(err.message || "Authentication failed")
-    } finally {
-      setLoading(false)
+      setError(err.message || "Authentication failed");
     }
   }
 
