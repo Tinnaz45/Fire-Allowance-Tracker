@@ -21,9 +21,13 @@ export default function AuthPage() {
     setLoading(true)
     setError(null)
     try {
-      await signIn(email, password)
+      if (mode === "signup") {
+        await signUp(email, password)
+      } else {
+        await signIn(email, password)
+      }
     } catch (err) {
-      setError(err.message || "Login failed")
+      setError(err.message || "Authentication failed")
     } finally {
       setLoading(false)
     }
