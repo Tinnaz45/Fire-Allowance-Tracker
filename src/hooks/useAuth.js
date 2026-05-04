@@ -1,5 +1,9 @@
-'use client'
-import { useEffect, useState } from 'react'
+import { useState, useEffect } from 'react'
+import { supabase } from '../supabaseClient'
+
+export function AuthProvider({ children }) {
+  return children
+}
 
 export function useAuth() {
   const [user, setUser] = useState(null)
@@ -9,25 +13,13 @@ export function useAuth() {
   useEffect(() => {
     let mounted = true
 
-    async function load() {
+    const load = async () => {
       try {
-        if (typeof window === 'undefined') return
-
-        const { createClient } = await import('@supabase/supabase-js')
-
-        const supabase = createClient(
-          process.env.NEXT_PUBLIC_SUPABASE_URL,
-          process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-        )
-
         const { data } = await supabase.auth.getSession()
-
         if (!mounted) return
 
-        setSession(data?.session ?? null)
-        setUser(data?.session?.user ?? null)
-      } catch (e) {
-        console.error('Auth load failed:', e)
+        setSession(data.session)
+        setUser(data.session?.user ?? null)
       } finally {
         if (mounted) setLoading(false)
       }
@@ -35,8 +27,17 @@ export function useAuth() {
 
     load()
 
+    const { data: listener } = supabase.auth.onAuthStateChange(
+      (_event, session) => {
+        if (!mounted) return
+        setSession(session)
+        setUser(session?.user ?? null)
+      }
+    )
+
     return () => {
       mounted = false
+      listener.subscription.unsubscribe()
     }
   }, [])
 
