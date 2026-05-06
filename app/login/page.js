@@ -1,28 +1,69 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabaseClient'
-import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 
 export default function LoginPage() {
-  const router = useRouter()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
+  const [showPassword, setShowPassword] = useState(false)
+
+  useEffect(() => {
+    console.log('RUNTIME ORIGIN:', window.location.origin)
+    console.log('SUPABASE URL (runtime test):', process.env.NEXT_PUBLIC_SUPABASE_URL)
+    console.log('SUPABASE KEY EXISTS:', Boolean(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY))
+    fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/auth/v1/health`)
+      .then(res => console.log('SUPABASE REACHABLE STATUS:', res.status))
+      .catch(err => console.error('SUPABASE FETCH ERROR:', err))
+  }, [])
 
   const handleLogin = async (e) => {
     e.preventDefault()
     setError(null)
     setLoading(true)
-    const { error } = await supabase.auth.signInWithPassword({ email, password })
-    setLoading(false)
-    if (error) {
-      setError(error.message)
-      return
+
+    // ── DEBUG: verify env vars are reaching the client ──────────────────────
+    console.log('SUPABASE URL:', process.env.NEXT_PUBLIC_SUPABASE_URL)
+    console.log(
+      'SUPABASE KEY:',
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ? 'EXISTS' : 'MISSING'
+    )
+
+    // ── FETCH TEST: confirm Supabase host is reachable ────────────────────
+    try {
+      const test = await fetch(process.env.NEXT_PUBLIC_SUPABASE_URL)
+      console.log('SUPABASE FETCH TEST:', test.status)
+    } catch (fetchErr) {
+      console.error('SUPABASE FETCH TEST FAILED:', fetchErr.message)
     }
-    router.push('/')
+
+    console.log('LOGIN CLICK FIRED')
+
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+        options: {
+          redirectTo: window.location.origin,
+        },
+      })
+      console.log('LOGIN RESULT:', { data, error })
+
+      if (error) {
+        setError(error.message)
+        setLoading(false)
+        return
+      }
+
+      window.location.assign('/')
+    } catch (err) {
+      console.error('LOGIN CRASH:', err)
+      setError('Login failed. Check your connection and try again.')
+      setLoading(false)
+    }
   }
 
   return (
@@ -59,16 +100,25 @@ export default function LoginPage() {
             <label htmlFor="password" className="block text-sm font-medium text-gray-300 mb-1.5">
               Password
             </label>
-            <input
-              id="password"
-              type="password"
-              required
-              autoComplete="current-password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="w-full px-4 py-3 bg-[#0f0f0f] border border-[#333] rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-red-600 focus:border-transparent transition"
-              placeholder="••••••••"
-            />
+            <div className="relative">
+              <input
+                id="password"
+                type={showPassword ? 'text' : 'password'}
+                required
+                autoComplete="current-password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="w-full px-4 py-3 bg-[#0f0f0f] border border-[#333] rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-red-600 focus:border-transparent transition pr-16"
+                placeholder="••••••••"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-gray-400 hover:text-white"
+              >
+                {showPassword ? 'Hide' : 'Show'}
+              </button>
+            </div>
           </div>
 
           {error && (
