@@ -8,6 +8,8 @@ import { supabase } from '@/lib/supabaseClient'
 async function fetchAllClaims(userId) {
   const tables = ['recalls', 'retain', 'standby', 'spoilt']
 
+  console.log('[Claims] Fetching for user:', userId)
+
   const results = await Promise.all(
     tables.map((table) =>
       supabase
@@ -22,6 +24,7 @@ async function fetchAllClaims(userId) {
   for (let i = 0; i < tables.length; i++) {
     const { data, error } = results[i]
     if (error) {
+      console.error(`[Claims] Supabase error on table "${tables[i]}":`, error)
       throw new Error(`Failed to load ${tables[i]} claims.`)
     }
     if (data) {
@@ -34,6 +37,7 @@ async function fetchAllClaims(userId) {
   // Sort all combined claims by date descending
   combined.sort((a, b) => new Date(b.date) - new Date(a.date))
 
+  console.log('[Claims] Total rows loaded:', combined.length)
   return combined
 }
 
@@ -203,10 +207,13 @@ export default function HomePage() {
     }
   }, [])
 
-  // ── Fetch Claims (once session is known) ──────────────────────────────────
+  // ── Fetch Claims — only after sessionResolved is true AND session exists ──
 
   useEffect(() => {
-    if (!session?.user?.id) return
+    // Do not run until getSession() has fully completed
+    if (!sessionResolved) return
+    // Do not run if there is no authenticated user
+    if (!session) return
 
     let cancelled = false
 
@@ -217,7 +224,7 @@ export default function HomePage() {
         const data = await fetchAllClaims(session.user.id)
         if (!cancelled) setClaims(data)
       } catch (err) {
-        console.error('Claims fetch error:', err)
+        console.error('[Claims] Fetch failed:', err)
         if (!cancelled) {
           setClaimsError(
             'Unable to load your claims. Please try refreshing the page.'
@@ -232,7 +239,7 @@ export default function HomePage() {
     return () => {
       cancelled = true
     }
-  }, [session?.user?.id])
+  }, [sessionResolved, session])
 
   // ── Guards ────────────────────────────────────────────────────────────────
 
