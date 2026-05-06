@@ -15,7 +15,7 @@ export default function LoginPage() {
     console.log('RUNTIME ORIGIN:', window.location.origin)
     console.log('SUPABASE URL (runtime test):', process.env.NEXT_PUBLIC_SUPABASE_URL)
     console.log('SUPABASE KEY EXISTS:', Boolean(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY))
-    fetch(process.env.NEXT_PUBLIC_SUPABASE_URL)
+    fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/auth/v1/health`)
       .then(res => console.log('SUPABASE REACHABLE STATUS:', res.status))
       .catch(err => console.error('SUPABASE FETCH ERROR:', err))
   }, [])
