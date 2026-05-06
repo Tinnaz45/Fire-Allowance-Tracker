@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabaseClient'
 import Link from 'next/link'
 
@@ -11,23 +11,58 @@ export default function LoginPage() {
   const [error, setError] = useState(null)
   const [showPassword, setShowPassword] = useState(false)
 
+  useEffect(() => {
+    console.log('RUNTIME ORIGIN:', window.location.origin)
+    console.log('SUPABASE URL (runtime test):', process.env.NEXT_PUBLIC_SUPABASE_URL)
+    console.log('SUPABASE KEY EXISTS:', Boolean(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY))
+    fetch(process.env.NEXT_PUBLIC_SUPABASE_URL)
+      .then(res => console.log('SUPABASE REACHABLE STATUS:', res.status))
+      .catch(err => console.error('SUPABASE FETCH ERROR:', err))
+  }, [])
+
   const handleLogin = async (e) => {
+    e.preventDefault()
+    setError(null)
+    setLoading(true)
+
+    // ── DEBUG: verify env vars are reaching the client ──────────────────────
+    console.log('SUPABASE URL:', process.env.NEXT_PUBLIC_SUPABASE_URL)
+    console.log(
+      'SUPABASE KEY:',
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ? 'EXISTS' : 'MISSING'
+    )
+
+    // ── FETCH TEST: confirm Supabase host is reachable ────────────────────
+    try {
+      const test = await fetch(process.env.NEXT_PUBLIC_SUPABASE_URL)
+      console.log('SUPABASE FETCH TEST:', test.status)
+    } catch (fetchErr) {
+      console.error('SUPABASE FETCH TEST FAILED:', fetchErr.message)
+    }
+
     console.log('LOGIN CLICK FIRED')
+
     try {
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
+        options: {
+          redirectTo: window.location.origin,
+        },
       })
       console.log('LOGIN RESULT:', { data, error })
+
       if (error) {
-        alert('LOGIN ERROR: ' + error.message)
+        setError(error.message)
+        setLoading(false)
         return
       }
-      alert('LOGIN SUCCESS')
+
       window.location.assign('/')
     } catch (err) {
       console.error('LOGIN CRASH:', err)
-      alert('LOGIN CRASH - see console')
+      setError('Login failed. Check your connection and try again.')
+      setLoading(false)
     }
   }
 
@@ -44,7 +79,7 @@ export default function LoginPage() {
           <p className="text-gray-400 text-sm mt-1">Fire Allowance Tracker</p>
         </div>
 
-        <form className="space-y-5">
+        <form onSubmit={handleLogin} className="space-y-5">
           <div>
             <label htmlFor="email" className="block text-sm font-medium text-gray-300 mb-1.5">
               Email address
@@ -93,11 +128,11 @@ export default function LoginPage() {
           )}
 
           <button
-            type="button"
-            onClick={handleLogin}
-            className="w-full bg-red-600 hover:bg-red-700 text-white font-semibold py-2 px-4 rounded"
+            type="submit"
+            disabled={loading}
+            className="w-full bg-red-600 hover:bg-red-700 disabled:bg-red-800 disabled:cursor-not-allowed text-white font-semibold py-3 px-4 rounded-xl transition-colors duration-200"
           >
-            Sign In
+            {loading ? 'Signing in…' : 'Sign In'}
           </button>
         </form>
 
