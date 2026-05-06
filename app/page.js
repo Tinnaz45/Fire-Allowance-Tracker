@@ -124,7 +124,7 @@ function NewClaimModal({ session, onClose, onSuccess }) {
         user_id: session.user.id,
         date,
         total_amount: Number(amount),
-        status: 'pending',
+        status: 'Pending',
       })
 
       if (insertError) {
