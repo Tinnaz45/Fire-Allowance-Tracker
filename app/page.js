@@ -14,7 +14,7 @@ async function fetchAllClaims(userId) {
     tables.map((table) =>
       supabase
         .from(table)
-        .select('id, date, total_amount, status')
+        .select('*')
         .eq('user_id', userId)
         .order('date', { ascending: false })
     )
@@ -29,12 +29,11 @@ async function fetchAllClaims(userId) {
     }
     if (data) {
       data.forEach((row) => {
-        combined.push({ ...row, claimType: tables[i] })
+        combined.push({ ...row, claimType: tables[i], type: tables[i] })
       })
     }
   }
 
-  // Sort all combined claims by date descending
   combined.sort((a, b) => new Date(b.date) - new Date(a.date))
 
   console.log('[Claims] Total rows loaded:', combined.length)
@@ -86,13 +85,244 @@ function StatusBadge({ status }) {
   )
 }
 
-// ─── Claim Type Label ───────────────────────────────────────────────────────
+// ─── Claim Type Labels ───────────────────────────────────────────────────────
 
 const CLAIM_TYPE_LABELS = {
   recalls: 'Recall',
   retain: 'Retain',
   standby: 'Standby',
   spoilt: 'Spoilt / Meal',
+}
+
+const CLAIM_TYPES = ['recalls', 'retain', 'standby', 'spoilt']
+
+// ─── New Claim Modal ─────────────────────────────────────────────────────────
+
+function NewClaimModal({ session, onClose, onSuccess }) {
+  const [claimType, setClaimType] = useState('recalls')
+  const [date, setDate] = useState('')
+  const [amount, setAmount] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState(null)
+
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    setError(null)
+
+    if (!date) {
+      setError('Please select a date.')
+      return
+    }
+    if (!amount || isNaN(Number(amount)) || Number(amount) <= 0) {
+      setError('Please enter a valid amount.')
+      return
+    }
+
+    setSubmitting(true)
+    try {
+      const { error: insertError } = await supabase.from(claimType).insert({
+        user_id: session.user.id,
+        date,
+        total_amount: Number(amount),
+        status: 'pending',
+      })
+
+      if (insertError) {
+        console.error('[NewClaim] Insert error:', insertError)
+        setError(insertError.message || 'Failed to create claim. Please try again.')
+        return
+      }
+
+      onSuccess()
+    } catch (err) {
+      console.error('[NewClaim] Unexpected error:', err)
+      setError('An unexpected error occurred. Please try again.')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const inputStyle = {
+    width: '100%',
+    padding: '10px 12px',
+    background: '#111',
+    border: '1px solid #333',
+    borderRadius: '8px',
+    color: '#e5e7eb',
+    fontSize: '0.9rem',
+    outline: 'none',
+    boxSizing: 'border-box',
+  }
+
+  const labelStyle = {
+    display: 'block',
+    fontSize: '0.78rem',
+    fontWeight: 600,
+    color: '#9ca3af',
+    textTransform: 'uppercase',
+    letterSpacing: '0.05em',
+    marginBottom: '6px',
+  }
+
+  return (
+    // Backdrop
+    <div
+      onClick={onClose}
+      style={{
+        position: 'fixed',
+        inset: 0,
+        background: 'rgba(0,0,0,0.7)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        zIndex: 1000,
+        padding: '20px',
+      }}
+    >
+      {/* Modal panel */}
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          background: '#1a1a1a',
+          border: '1px solid #2a2a2a',
+          borderRadius: '16px',
+          padding: '28px 24px',
+          width: '100%',
+          maxWidth: '420px',
+          boxShadow: '0 24px 64px rgba(0,0,0,0.6)',
+        }}
+      >
+        {/* Modal header */}
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            marginBottom: '24px',
+          }}
+        >
+          <h2 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 700, color: '#f9fafb' }}>
+            New Claim
+          </h2>
+          <button
+            onClick={onClose}
+            style={{
+              background: 'none',
+              border: 'none',
+              color: '#6b7280',
+              cursor: 'pointer',
+              fontSize: '1.4rem',
+              lineHeight: 1,
+              padding: '0 4px',
+            }}
+            aria-label="Close"
+          >
+            ×
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} noValidate>
+          {/* Type */}
+          <div style={{ marginBottom: '16px' }}>
+            <label style={labelStyle}>Type</label>
+            <select
+              value={claimType}
+              onChange={(e) => setClaimType(e.target.value)}
+              style={{ ...inputStyle, cursor: 'pointer' }}
+            >
+              {CLAIM_TYPES.map((t) => (
+                <option key={t} value={t}>
+                  {CLAIM_TYPE_LABELS[t]}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Date */}
+          <div style={{ marginBottom: '16px' }}>
+            <label style={labelStyle}>Date</label>
+            <input
+              type="date"
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
+              style={{ ...inputStyle, colorScheme: 'dark' }}
+            />
+          </div>
+
+          {/* Amount */}
+          <div style={{ marginBottom: '24px' }}>
+            <label style={labelStyle}>Amount ($)</label>
+            <input
+              type="number"
+              min="0.01"
+              step="0.01"
+              placeholder="0.00"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              style={inputStyle}
+            />
+          </div>
+
+          {/* Error */}
+          {error && (
+            <div
+              style={{
+                marginBottom: '16px',
+                background: 'rgba(239,68,68,0.1)',
+                border: '1px solid rgba(239,68,68,0.3)',
+                color: '#f87171',
+                borderRadius: '8px',
+                padding: '10px 14px',
+                fontSize: '0.85rem',
+              }}
+            >
+              {error}
+            </div>
+          )}
+
+          {/* Actions */}
+          <div style={{ display: 'flex', gap: '10px' }}>
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={submitting}
+              style={{
+                flex: 1,
+                padding: '10px',
+                background: 'transparent',
+                border: '1px solid #333',
+                borderRadius: '8px',
+                color: '#9ca3af',
+                cursor: submitting ? 'not-allowed' : 'pointer',
+                fontSize: '0.9rem',
+                fontWeight: 600,
+              }}
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={submitting}
+              style={{
+                flex: 1,
+                padding: '10px',
+                background: submitting ? '#7f1d1d' : '#dc2626',
+                border: 'none',
+                borderRadius: '8px',
+                color: 'white',
+                cursor: submitting ? 'not-allowed' : 'pointer',
+                fontSize: '0.9rem',
+                fontWeight: 600,
+                transition: 'background 0.15s',
+              }}
+            >
+              {submitting ? 'Submitting…' : 'Submit Claim'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
 }
 
 // ─── Claims Table ───────────────────────────────────────────────────────────
@@ -148,7 +378,8 @@ function ClaimsTable({ claims }) {
                   : '—'}
               </td>
               <td style={{ padding: '12px 14px', color: '#9ca3af' }}>
-                {CLAIM_TYPE_LABELS[claim.claimType] || claim.claimType}
+                <div>{CLAIM_TYPE_LABELS[claim.claimType] || claim.claimType}</div>
+                <div style={{ fontSize: '0.72rem', color: '#4b5563', marginTop: '2px' }}>{claim.type}</div>
               </td>
               <td
                 style={{
@@ -157,9 +388,16 @@ function ClaimsTable({ claims }) {
                   fontVariantNumeric: 'tabular-nums',
                 }}
               >
-                {claim.total_amount != null
-                  ? `$${Number(claim.total_amount).toFixed(2)}`
-                  : '—'}
+                {(() => {
+                  const amount =
+                    claim.total_amount ??
+                    claim.amount ??
+                    claim.value ??
+                    null
+                  return amount != null
+                    ? `$${Number(amount).toFixed(2)}`
+                    : '—'
+                })()}
               </td>
               <td style={{ padding: '12px 14px' }}>
                 <StatusBadge status={claim.status} />
@@ -182,6 +420,9 @@ export default function HomePage() {
   const [claims, setClaims] = useState([])
   const [claimsLoading, setClaimsLoading] = useState(false)
   const [claimsError, setClaimsError] = useState(null)
+
+  const [showNewClaimModal, setShowNewClaimModal] = useState(false)
+  const [successMessage, setSuccessMessage] = useState(null)
 
   // ── Auth ──────────────────────────────────────────────────────────────────
 
@@ -207,17 +448,29 @@ export default function HomePage() {
     }
   }, [])
 
-  // ── Fetch Claims — only after sessionResolved is true AND session exists ──
+  // ── Fetch Claims ──────────────────────────────────────────────────────────
+
+  const loadClaims = async (userId) => {
+    setClaimsLoading(true)
+    setClaimsError(null)
+    try {
+      const data = await fetchAllClaims(userId)
+      setClaims(data)
+    } catch (err) {
+      console.error('[Claims] Fetch failed:', err)
+      setClaimsError('Unable to load your claims. Please try refreshing the page.')
+    } finally {
+      setClaimsLoading(false)
+    }
+  }
 
   useEffect(() => {
-    // Do not run until getSession() has fully completed
     if (!sessionResolved) return
-    // Do not run if there is no authenticated user
     if (!session) return
 
     let cancelled = false
 
-    const loadClaims = async () => {
+    const run = async () => {
       setClaimsLoading(true)
       setClaimsError(null)
       try {
@@ -226,20 +479,27 @@ export default function HomePage() {
       } catch (err) {
         console.error('[Claims] Fetch failed:', err)
         if (!cancelled) {
-          setClaimsError(
-            'Unable to load your claims. Please try refreshing the page.'
-          )
+          setClaimsError('Unable to load your claims. Please try refreshing the page.')
         }
       } finally {
         if (!cancelled) setClaimsLoading(false)
       }
     }
 
-    loadClaims()
+    run()
     return () => {
       cancelled = true
     }
   }, [sessionResolved, session])
+
+  // ── Handle successful claim creation ──────────────────────────────────────
+
+  const handleClaimSuccess = async () => {
+    setShowNewClaimModal(false)
+    setSuccessMessage('Claim submitted successfully!')
+    setTimeout(() => setSuccessMessage(null), 4000)
+    await loadClaims(session.user.id)
+  }
 
   // ── Guards ────────────────────────────────────────────────────────────────
 
@@ -351,6 +611,24 @@ export default function HomePage() {
           </button>
         </div>
 
+        {/* Success Banner */}
+        {successMessage && (
+          <div
+            style={{
+              marginBottom: '20px',
+              background: 'rgba(34,197,94,0.1)',
+              border: '1px solid rgba(34,197,94,0.3)',
+              color: '#4ade80',
+              borderRadius: '10px',
+              padding: '12px 16px',
+              fontSize: '0.875rem',
+              fontWeight: 500,
+            }}
+          >
+            ✓ {successMessage}
+          </div>
+        )}
+
         {/* Claims Section */}
         <div
           style={{
@@ -360,19 +638,54 @@ export default function HomePage() {
             padding: '24px',
           }}
         >
-          <h2
+          {/* Section header row */}
+          <div
             style={{
-              margin: '0 0 4px 0',
-              fontSize: '1rem',
-              fontWeight: 700,
-              color: '#f9fafb',
+              display: 'flex',
+              alignItems: 'flex-start',
+              justifyContent: 'space-between',
+              gap: '12px',
+              flexWrap: 'wrap',
             }}
           >
-            My Claims
-          </h2>
-          <p style={{ margin: 0, fontSize: '0.8rem', color: '#6b7280' }}>
-            Recalls · Retain · Standby · Spoilt meals
-          </p>
+            <div>
+              <h2
+                style={{
+                  margin: '0 0 4px 0',
+                  fontSize: '1rem',
+                  fontWeight: 700,
+                  color: '#f9fafb',
+                }}
+              >
+                My Claims
+              </h2>
+              <p style={{ margin: 0, fontSize: '0.8rem', color: '#6b7280' }}>
+                Recalls · Retain · Standby · Spoilt meals
+              </p>
+            </div>
+
+            {/* New Claim Button */}
+            <button
+              onClick={() => setShowNewClaimModal(true)}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '8px 16px',
+                background: '#dc2626',
+                border: 'none',
+                borderRadius: '8px',
+                color: 'white',
+                fontSize: '0.85rem',
+                fontWeight: 600,
+                cursor: 'pointer',
+                flexShrink: 0,
+              }}
+            >
+              <span style={{ fontSize: '1.1rem', lineHeight: 1 }}>+</span>
+              New Claim
+            </button>
+          </div>
 
           {/* Loading state */}
           {claimsLoading && (
@@ -410,6 +723,15 @@ export default function HomePage() {
           )}
         </div>
       </div>
+
+      {/* New Claim Modal */}
+      {showNewClaimModal && (
+        <NewClaimModal
+          session={session}
+          onClose={() => setShowNewClaimModal(false)}
+          onSuccess={handleClaimSuccess}
+        />
+      )}
     </div>
   )
 }
