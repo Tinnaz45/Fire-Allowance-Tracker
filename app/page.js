@@ -658,4 +658,165 @@ export default function HomePage() {
               borderRadius: '10px', display: 'flex', alignItems: 'center',
               justifyContent: 'center', flexShrink: 0,
             }}>
-              <svg width="
+              <svg width="22" height="22" fill="none" stroke="white" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                  d="M17.657 18.657A8 8 0 016.343 7.343S7 9 9 10c0-2 .5-5 2.986-7C14 5 16.09 5.777 17.656 7.343A7.975 7.975 0 0120 13a7.975 7.975 0 01-2.343 5.657z" />
+              </svg>
+            </div>
+            <div>
+              <h1 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 700, color: '#f9fafb' }}>
+                Fire Allowance Tracker
+              </h1>
+              <p style={{ margin: 0, fontSize: '0.8rem', color: '#6b7280' }}>
+                {session.user.email}
+              </p>
+            </div>
+          </div>
+
+          <button
+            onClick={async () => { await supabase.auth.signOut(); window.location.assign('/login') }}
+            style={{
+              padding: '8px 16px', background: '#dc2626', color: 'white',
+              border: 'none', borderRadius: '8px', cursor: 'pointer',
+              fontSize: '0.85rem', fontWeight: 600,
+            }}
+          >
+            Logout
+          </button>
+        </div>
+
+        {/* Success Banner */}
+        {successMessage && (
+          <div style={{
+            marginBottom: '20px',
+            background: 'rgba(34,197,94,0.1)',
+            border: '1px solid rgba(34,197,94,0.3)',
+            color: '#4ade80', borderRadius: '10px',
+            padding: '12px 16px', fontSize: '0.875rem', fontWeight: 500,
+          }}>
+            ✓ {successMessage}
+          </div>
+        )}
+
+        {/* Claims Section */}
+        <div style={{
+          background: '#1a1a1a', border: '1px solid #2a2a2a',
+          borderRadius: '16px', padding: '24px',
+        }}>
+          {/* Section header row */}
+          <div style={{
+            display: 'flex', alignItems: 'flex-start',
+            justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap',
+          }}>
+            <div>
+              <h2 style={{ margin: '0 0 4px 0', fontSize: '1rem', fontWeight: 700, color: '#f9fafb' }}>
+                My Claims
+              </h2>
+              <p style={{ margin: 0, fontSize: '0.8rem', color: '#6b7280' }}>
+                Recalls · Retain · Standby · Spoilt meals
+              </p>
+            </div>
+
+            <button
+              onClick={() => setShowNewClaimModal(true)}
+              style={{
+                display: 'flex', alignItems: 'center', gap: '6px',
+                padding: '8px 16px', background: '#dc2626', border: 'none',
+                borderRadius: '8px', color: 'white', fontSize: '0.85rem',
+                fontWeight: 600, cursor: 'pointer', flexShrink: 0,
+              }}
+            >
+              <span style={{ fontSize: '1.1rem', lineHeight: 1 }}>+</span>
+              New Claim
+            </button>
+          </div>
+
+          {/* Tabs + Sort/Filter controls */}
+          <div style={{
+            marginTop: '20px',
+            display: 'flex', alignItems: 'center',
+            justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px',
+          }}>
+            {/* Status tabs */}
+            <div style={{
+              display: 'flex', gap: '4px',
+              background: '#111', borderRadius: '10px', padding: '4px',
+            }}>
+              {[
+                { key: 'all', label: 'All' },
+                { key: 'pending', label: 'Pending' },
+                { key: 'paid', label: 'Paid' },
+              ].map(({ key, label }) => (
+                <button key={key} onClick={() => setActiveTab(key)}
+                  style={tabStyle(activeTab === key)}>
+                  {label}
+                </button>
+              ))}
+            </div>
+
+            {/* Sort + Type filter */}
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+              <select value={filterType} onChange={(e) => setFilterType(e.target.value)}
+                style={selectStyle}>
+                <option value="all">All types</option>
+                {CLAIM_TYPES.map((t) => (
+                  <option key={t} value={t}>{CLAIM_TYPE_LABELS[t]}</option>
+                ))}
+              </select>
+
+              <select value={sortBy} onChange={(e) => setSortBy(e.target.value)}
+                style={selectStyle}>
+                <option value="date-desc">Newest first</option>
+                <option value="date-asc">Oldest first</option>
+                <option value="type">Sort by type</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Loading state */}
+          {claimsLoading && (
+            <p style={{ color: '#9ca3af', marginTop: '24px', fontSize: '0.9rem' }}>
+              Loading claims…
+            </p>
+          )}
+
+          {/* Error state */}
+          {!claimsLoading && claimsError && (
+            <div style={{
+              marginTop: '20px',
+              background: 'rgba(239,68,68,0.1)',
+              border: '1px solid rgba(239,68,68,0.3)',
+              color: '#f87171', borderRadius: '10px',
+              padding: '12px 16px', fontSize: '0.875rem',
+            }}>
+              {claimsError}
+            </div>
+          )}
+
+          {/* Claims table */}
+          {!claimsLoading && !claimsError && (
+            <ClaimsTable claims={displayedClaims} onEdit={setEditingClaim} />
+          )}
+        </div>
+      </div>
+
+      {/* New Claim Modal */}
+      {showNewClaimModal && (
+        <NewClaimModal
+          session={session}
+          onClose={() => setShowNewClaimModal(false)}
+          onSuccess={handleClaimSuccess}
+        />
+      )}
+
+      {/* Edit Claim Modal */}
+      {editingClaim && (
+        <EditClaimModal
+          claim={editingClaim}
+          onClose={() => setEditingClaim(null)}
+          onSuccess={handleEditSuccess}
+        />
+      )}
+    </div>
+  )
+}
