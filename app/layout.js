@@ -1,4 +1,7 @@
 import './globals.css'
+import { ClaimsProvider } from '@/lib/claims/ClaimsContext'
+import { RatesProvider } from '@/lib/calculations/RatesContext'
+import { FinancialYearProvider } from '@/lib/fy/FinancialYearContext'
 
 export const metadata = {
   title: 'Fire Allowance Tracker',
@@ -39,7 +42,13 @@ export default function RootLayout({ children }) {
         <meta name="theme-color" content="#b30000" />
         <meta name="mobile-web-app-capable" content="yes" />
       </head>
-      <body>{children}</body>
+      <body>
+        <RatesProvider>
+          <FinancialYearProvider>
+            <ClaimsProvider>{children}</ClaimsProvider>
+          </FinancialYearProvider>
+        </RatesProvider>
+      </body>
     </html>
   )
 }
