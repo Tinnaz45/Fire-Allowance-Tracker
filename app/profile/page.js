@@ -1,6 +1,240 @@
 'use client'
-export const dynamic = 'force-dynamic'
-import { redirect } from 'next/navigation'
-export default function Page() {
-  redirect('/')
+
+// Profile Page - placeholder redirect fixed
+import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
+import { supabase } from '@/lib/supabaseClient'
+
+const S = {
+  page: { minHeight: '100vh', background: '#0f0f0f', color: '#e5e7eb', padding: '32px 16px', fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif', boxSizing: 'border-box', overflowX: 'hidden' },
+  inner: { maxWidth: '560px', margin: '0 auto' },
+  card: { background: '#1a1a1a', border: '1px solid #2a2a2a', borderRadius: '16px', padding: '24px', marginBottom: '20px' },
+  cardTitle: { margin: '0 0 20px 0', fontSize: '0.95rem', fontWeight: 700, color: '#f9fafb', borderBottom: '1px solid #2a2a2a', paddingBottom: '12px' },
+  label: { display: 'block', fontSize: '0.78rem', fontWeight: 600, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '6px' },
+  input: { width: '100%', padding: '10px 12px', background: '#111', border: '1px solid #333', borderRadius: '8px', color: '#e5e7eb', fontSize: '0.9rem', outline: 'none', boxSizing: 'border-box' },
+  select: { width: '100%', padding: '10px 12px', background: '#111', border: '1px solid #333', borderRadius: '8px', color: '#e5e7eb', fontSize: '0.9rem', outline: 'none', boxSizing: 'border-box', cursor: 'pointer' },
+  field: { marginBottom: '16px' },
+  help: { marginTop: '4px', fontSize: '0.74rem', color: '#6b7280' },
+  stationBadge: { display: 'inline-block', padding: '4px 12px', background: 'rgba(220,38,38,0.12)', border: '1px solid rgba(220,38,38,0.3)', borderRadius: '6px', color: '#fca5a5', fontSize: '0.82rem', fontWeight: 700, letterSpacing: '0.04em', marginTop: '6px' },
+  row: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' },
+  saveBtn: { width: '100%', padding: '12px', background: '#dc2626', border: 'none', borderRadius: '8px', color: 'white', fontSize: '0.9rem', fontWeight: 600, cursor: 'pointer' },
+  backBtn: { display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '8px 0', background: 'none', border: 'none', color: '#9ca3af', fontSize: '0.85rem', cursor: 'pointer', marginBottom: '24px' },
+  success: { background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.3)', color: '#4ade80', borderRadius: '10px', padding: '12px 16px', fontSize: '0.875rem', marginBottom: '16px' },
+  error: { background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', color: '#f87171', borderRadius: '8px', padding: '10px 14px', fontSize: '0.85rem', marginBottom: '16px' },
+  note: { background: 'rgba(251,191,36,0.08)', border: '1px solid rgba(251,191,36,0.2)', borderRadius: '8px', padding: '10px 14px', fontSize: '0.8rem', color: '#fbbf24', marginTop: '8px' },
+}
+
+const PLATOONS = ['A', 'B', 'C', 'D', 'Z']
+
+export default function ProfilePage() {
+  const router = useRouter()
+  const [session, setSession] = useState(null)
+  const [authLoading, setAuthLoading] = useState(true)
+  const [firstName, setFirstName] = useState('')
+  const [lastName, setLastName] = useState('')
+  const [homeAddress, setHomeAddress] = useState('')
+  const [platoon, setPlatoon] = useState('')
+  const [payNumber, setPayNumber] = useState('')
+  const [stationId, setStationId] = useState('')
+  const [stationName, setStationName] = useState('')
+  const [stationSearch, setStationSearch] = useState('')
+  const [stations, setStations] = useState([])
+  const [showStationPicker, setShowStationPicker] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [successMsg, setSuccessMsg] = useState(null)
+  const [errorMsg, setErrorMsg] = useState(null)
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => {
+      if (!data.session) { router.replace('/login'); return }
+      setSession(data.session)
+      setAuthLoading(false)
+    })
+  }, [router])
+
+  useEffect(() => {
+    if (!session) return
+    const load = async () => {
+      try {
+        // Load base profile (shared table — only first_name, last_name, email)
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('first_name, last_name')
+          .eq('id', session.user.id)
+          .single()
+        if (profile) {
+          setFirstName(profile.first_name || '')
+          setLastName(profile.last_name || '')
+        }
+        // Load FAT-specific profile extension (fat_profile_ext — owned by Fire Allowance Tracker)
+        const { data: ext } = await supabase
+          .from('fat_profile_ext')
+          .select('home_address, platoon, pay_number, station_id, rostered_station_label')
+          .eq('user_id', session.user.id)
+          .maybeSingle()
+        if (ext) {
+          setHomeAddress(ext.home_address || '')
+          setPlatoon(ext.platoon || '')
+          setPayNumber(ext.pay_number || '')
+          setStationId(ext.station_id ? String(ext.station_id) : '')
+          setStationName(ext.rostered_station_label || '')
+        }
+        // Load stations from FAT-owned fat_stations table
+        const { data: stns } = await supabase
+          .from('fat_stations')
+          .select('id, name, abbreviation')
+          .eq('is_active', true)
+          .order('id', { ascending: true })
+        if (stns) setStations(stns)
+      } catch (err) {
+        setErrorMsg('Could not load profile. Please refresh.')
+      }
+    }
+    load()
+  }, [session])
+
+  const filteredStations = stations.filter((s) => {
+    if (!stationSearch) return true
+    const q = stationSearch.toLowerCase()
+    return String(s.id).includes(q) || (s.name || '').toLowerCase().includes(q) || (s.abbreviation || '').toLowerCase().includes(q)
+  })
+
+  const handleSave = async (e) => {
+    e.preventDefault()
+    setErrorMsg(null)
+    setSuccessMsg(null)
+    if (!homeAddress.trim()) { setErrorMsg('Home address is required for travel calculations.'); return }
+    setSaving(true)
+    try {
+      const stationLabel = stationId ? (stationName ? `FS${stationId} - ${stationName}` : `FS${stationId}`) : ''
+
+      // Save base profile fields (shared table — first_name + last_name only)
+      const { error: profileError } = await supabase.from('profiles').upsert({
+        id: session.user.id,
+        first_name: firstName.trim(),
+        last_name: lastName.trim(),
+      }, { onConflict: 'id' })
+      if (profileError) throw profileError
+
+      // Save FAT-specific fields to fat_profile_ext (FAT-owned extension table)
+      const { error: extError } = await supabase.from('fat_profile_ext').upsert({
+        user_id:                session.user.id,
+        home_address:           homeAddress.trim(),
+        platoon:                platoon || null,
+        station_id:             stationId ? parseInt(stationId) : null,
+        rostered_station_label: stationLabel,
+        pay_number:             payNumber.trim() || null,
+      }, { onConflict: 'user_id' })
+      if (extError) throw extError
+
+      setSuccessMsg('Profile saved successfully.')
+      setTimeout(() => setSuccessMsg(null), 4000)
+    } catch (err) {
+      setErrorMsg(err.message || 'Failed to save profile.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  if (authLoading) {
+    return <div style={{ minHeight: '100vh', background: '#0f0f0f', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#9ca3af' }}>Loading...</div>
+  }
+  if (!session) return null
+
+  const activeStationLabel = stationId ? (stationName ? `FS${stationId} - ${stationName}` : `FS${stationId}`) : null
+
+  return (
+    <div style={S.page}>
+      <div style={S.inner}>
+        <button style={S.backBtn} onClick={() => router.push('/')}>Back to Dashboard</button>
+        <div style={{ marginBottom: '28px' }}>
+          <h1 style={{ margin: '0 0 4px', fontSize: '1.35rem', fontWeight: 700, color: '#f9fafb' }}>Profile</h1>
+          <p style={{ margin: 0, fontSize: '0.82rem', color: '#6b7280' }}>{session.user.email}</p>
+        </div>
+        {successMsg && <div style={S.success}>&#10003; {successMsg}</div>}
+        {errorMsg && <div style={S.error}>{errorMsg}</div>}
+        <form onSubmit={handleSave} noValidate>
+          <div style={S.card}>
+            <h2 style={S.cardTitle}>Personal Details</h2>
+            <div style={S.row}>
+              <div style={S.field}>
+                <label style={S.label}>First Name</label>
+                <input type="text" value={firstName} onChange={(e) => setFirstName(e.target.value)} placeholder="Danny" style={S.input} />
+              </div>
+              <div style={S.field}>
+                <label style={S.label}>Last Name</label>
+                <input type="text" value={lastName} onChange={(e) => setLastName(e.target.value)} placeholder="Smith" style={S.input} />
+              </div>
+            </div>
+            <div style={S.field}>
+              <label style={S.label}>Pay Number</label>
+              <input type="text" value={payNumber} onChange={(e) => setPayNumber(e.target.value)} placeholder="e.g. 12345" style={S.input} />
+              <p style={S.help}>Your employee number for payslip reconciliation.</p>
+            </div>
+          </div>
+          <div style={S.card}>
+            <h2 style={S.cardTitle}>Operational Details</h2>
+            <div style={S.field}>
+              <label style={S.label}>Rostered Station</label>
+              {activeStationLabel && <div style={S.stationBadge}>{activeStationLabel}</div>}
+              <div style={{ marginTop: activeStationLabel ? '10px' : '0' }}>
+                <input
+                  type="text"
+                  value={stationSearch}
+                  onChange={(e) => { setStationSearch(e.target.value); setShowStationPicker(true) }}
+                  onFocus={() => setShowStationPicker(true)}
+                  placeholder="Search by number or name (e.g. 45 or Brooklyn)"
+                  style={S.input}
+                />
+                {showStationPicker && stationSearch && (
+                  <div style={{ background: '#111', border: '1px solid #333', borderRadius: '8px', marginTop: '4px', maxHeight: '200px', overflowY: 'auto' }}>
+                    {filteredStations.length === 0 ? (
+                      <div style={{ padding: '12px', color: '#6b7280', fontSize: '0.85rem' }}>No stations found.</div>
+                    ) : (
+                      filteredStations.slice(0, 20).map((s) => (
+                        <button key={s.id} type="button"
+                          onClick={() => { setStationId(String(s.id)); setStationName(s.name); setStationSearch(''); setShowStationPicker(false) }}
+                          style={{ display: 'block', width: '100%', textAlign: 'left', padding: '10px 14px', background: 'none', border: 'none', borderBottom: '1px solid #1f1f1f', color: '#e5e7eb', fontSize: '0.875rem', cursor: 'pointer' }}>
+                          <span style={{ fontWeight: 700, color: '#fca5a5' }}>FS{s.id}</span> &mdash; {s.name}
+                        </button>
+                      ))
+                    )}
+                  </div>
+                )}
+              </div>
+              {stationId && (
+                <button type="button" onClick={() => { setStationId(''); setStationName(''); setStationSearch('') }}
+                  style={{ marginTop: '6px', background: 'none', border: 'none', color: '#6b7280', fontSize: '0.78rem', cursor: 'pointer', padding: 0 }}>
+                  Clear station
+                </button>
+              )}
+              <p style={S.help}>You have one active rostered station. Recall claims will auto-suggest this.</p>
+            </div>
+            <div style={S.field}>
+              <label style={S.label}>Platoon</label>
+              <select value={platoon} onChange={(e) => setPlatoon(e.target.value)} style={S.select}>
+                <option value="">Select platoon</option>
+                {PLATOONS.map((p) => <option key={p} value={p}>{p} Platoon</option>)}
+              </select>
+            </div>
+          </div>
+          <div style={S.card}>
+            <h2 style={S.cardTitle}>Home Address</h2>
+            <div style={S.field}>
+              <label style={S.label}>Home Address</label>
+              <input type="text" value={homeAddress} onChange={(e) => setHomeAddress(e.target.value)} placeholder="12 Station Road, Suburb VIC 3000" style={S.input} autoComplete="street-address" />
+              <p style={S.help}>Used to calculate your home-to-station distance on Recall claims.</p>
+              <div style={S.note}>Changing your address only affects future claims. Existing claims retain the address used at creation.</div>
+            </div>
+            <div style={{ marginTop: '4px', padding: '10px 14px', background: '#111', border: '1px solid #2a2a2a', borderRadius: '8px', fontSize: '0.8rem', color: '#6b7280' }}>
+              Distance is currently entered manually on each claim. Google Maps auto-calculation will be available when NEXT_PUBLIC_GOOGLE_MAPS_API_KEY is configured.
+            </div>
+          </div>
+          <button type="submit" disabled={saving} style={{ ...S.saveBtn, background: saving ? '#7f1d1d' : '#dc2626', cursor: saving ? 'not-allowed' : 'pointer' }}>
+            {saving ? 'Saving...' : 'Save Profile'}
+          </button>
+        </form>
+      </div>
+    </div>
+  )
 }

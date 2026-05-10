@@ -1,0 +1,715 @@
+'use client'
+
+// ─── ClaimForm ─────────────────────────────────────────────────────────────────
+// Operational claim creation form with:
+//   - Recall: correct route (Home→Roster→Recall→Roster→Home), double meal option
+//   - Standby: 1900 boundary rule, M&D no-meal, Show Calculation
+//   - Spoilt/Delayed: Day/Night windows, time entry, window indicator
+//   - Adjusted amount override with revert
+//   - Show Calculation panel for all types
+//   - Profile pre-fill for rostered station
+//   - financialYearId prop wired into addClaim for FY + numbering
+// ─────────────────────────────────────────────────────────────────────────────
+
+import { useState, useEffect } from 'react'
+import { useClaims } from '@/lib/claims/ClaimsContext'
+import { useRates } from '@/lib/calculations/RatesContext'
+import { CLAIM_TABLES, CLAIM_TYPE_LABELS } from '@/lib/claims/claimTypes'
+import {
+  calcRecallClaim,
+  calcRetainClaim,
+  calcStandbyClaim,
+  calcSpoiltClaim,
+  isStandbyNightMealEligible,
+  getMealWindow,
+  checkTimeInMealWindow,
+  buildRecallCalcLines,
+  buildStandbyCalcLines,
+  buildSpoiltCalcLines,
+  buildCalcSnapshot,
+  roundMoney,
+} from '@/lib/calculations/engine'
+import { supabase } from '@/lib/supabaseClient'
+
+// ─── Shared styles ────────────────────────────────────────────────────────────
+
+const INPUT_STYLE = {
+  width: '100%',
+  padding: '10px 12px',
+  background: '#111',
+  border: '1px solid #333',
+  borderRadius: '8px',
+  color: '#e5e7eb',
+  fontSize: '0.9rem',
+  outline: 'none',
+  boxSizing: 'border-box',
+}
+
+const LABEL_STYLE = {
+  display: 'block',
+  fontSize: '0.78rem',
+  fontWeight: 600,
+  color: '#9ca3af',
+  textTransform: 'uppercase',
+  letterSpacing: '0.05em',
+  marginBottom: '6px',
+}
+
+const FIELD = { marginBottom: '16px' }
+const HELP_STYLE = { marginTop: '4px', fontSize: '0.74rem', color: '#6b7280' }
+
+// ─── Show Calculation Panel ───────────────────────────────────────────────────
+
+function ShowCalcPanel({ lines, onClose }) {
+  if (!lines || lines.length === 0) return null
+  return (
+    <div style={{
+      background: '#111',
+      border: '1px solid #2a2a2a',
+      borderRadius: '10px',
+      padding: '14px 16px',
+      marginBottom: '16px',
+      fontSize: '0.82rem',
+      lineHeight: 1.7,
+    }}>
+      <div style={{
+        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+        marginBottom: '10px',
+      }}>
+        <span style={{ fontSize: '0.74rem', fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+          How this is calculated
+        </span>
+        <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#6b7280', cursor: 'pointer', fontSize: '1rem', lineHeight: 1 }}>×</button>
+      </div>
+      {lines.map((line, i) => {
+        const isHeader = line.startsWith('──')
+        const isTotal  = line.includes('Total:')
+        return (
+          <div key={i} style={{
+            color: isTotal ? '#f9fafb' : isHeader ? '#dc2626' : '#d1d5db',
+            fontWeight: isTotal || isHeader ? 700 : 400,
+            paddingLeft: line.startsWith('  ') ? '12px' : '0',
+            marginBottom: isHeader ? '4px' : '0',
+          }}>
+            {line.trim()}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+// ─── Calculation Preview ──────────────────────────────────────────────────────
+
+function CalcPreview({ breakdown, rates, onShowCalc }) {
+  if (!breakdown) return null
+
+  const lines = []
+  if (breakdown.travelAmount > 0)  lines.push(`Travel: $${breakdown.travelAmount.toFixed(2)} (${breakdown.totalKm != null ? `${breakdown.totalKm} km × $${rates.kilometreRate?.toFixed(2) || '0.99'}` : ''})`)
+  if (breakdown.mealieAmount > 0)  lines.push(`Meal allowance: $${breakdown.mealieAmount.toFixed(2)}`)
+  if (breakdown.nightMealie > 0)   lines.push(`Night meal: $${breakdown.nightMealie.toFixed(2)}`)
+  if (breakdown.mealAmount > 0)    lines.push(`Meal allowance: $${breakdown.mealAmount.toFixed(2)}`)
+  if (breakdown.retainAmount > 0)  lines.push(`Retain: $${breakdown.retainAmount.toFixed(2)}`)
+  if (breakdown.overnightCash > 0) lines.push(`Overnight: $${breakdown.overnightCash.toFixed(2)}`)
+
+  return (
+    <div style={{
+      background: 'rgba(220,38,38,0.07)',
+      border: '1px solid rgba(220,38,38,0.2)',
+      borderRadius: '8px',
+      padding: '10px 14px',
+      marginBottom: '16px',
+      fontSize: '0.85rem',
+    }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+        <div style={{ fontSize: '0.74rem', color: '#9ca3af', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+          Auto-calculated
+        </div>
+        <button type="button" onClick={onShowCalc}
+          style={{ background: 'none', border: 'none', color: '#dc2626', fontSize: '0.74rem', cursor: 'pointer', fontWeight: 600 }}>
+          Show Calculation
+        </button>
+      </div>
+      {lines.map((l, i) => (
+        <div key={i} style={{ color: '#e5e7eb', marginBottom: '2px' }}>{l}</div>
+      ))}
+      <div style={{ borderTop: '1px solid rgba(220,38,38,0.2)', marginTop: '8px', paddingTop: '8px', fontWeight: 700, color: '#f9fafb' }}>
+        Total: ${breakdown.totalAmount.toFixed(2)}
+      </div>
+    </div>
+  )
+}
+
+// ─── Adjusted Amount Control ──────────────────────────────────────────────────
+
+function AdjustedAmountField({ calculatedAmount, adjustedAmount, onChange }) {
+  const isAdjusted = adjustedAmount !== null && adjustedAmount !== ''
+  return (
+    <div style={FIELD}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+        <label style={{ ...LABEL_STYLE, marginBottom: 0 }}>Amount ($)</label>
+        {isAdjusted && (
+          <span style={{
+            fontSize: '0.72rem', fontWeight: 700, color: '#fbbf24',
+            background: 'rgba(251,191,36,0.1)', border: '1px solid rgba(251,191,36,0.3)',
+            borderRadius: '4px', padding: '2px 8px',
+          }}>Adjusted</span>
+        )}
+      </div>
+      <input
+        type="number" min="0" step="0.01"
+        placeholder={calculatedAmount != null ? calculatedAmount.toFixed(2) : '0.00'}
+        value={adjustedAmount !== null ? adjustedAmount : ''}
+        onChange={(e) => onChange(e.target.value === '' ? null : e.target.value)}
+        style={INPUT_STYLE}
+      />
+      {isAdjusted && (
+        <button type="button" onClick={() => onChange(null)}
+          style={{ background: 'none', border: 'none', color: '#6b7280', fontSize: '0.74rem', cursor: 'pointer', marginTop: '4px', padding: 0 }}>
+          ↩ Revert to calculated (${calculatedAmount != null ? calculatedAmount.toFixed(2) : '0.00'})
+        </button>
+      )}
+      {!isAdjusted && (
+        <p style={HELP_STYLE}>Leave blank to use calculated amount. Enter a value here to override.</p>
+      )}
+    </div>
+  )
+}
+
+// ─── Sub-form: Recall ─────────────────────────────────────────────────────────
+
+function RecallInputs({ values, onChange, profile }) {
+  const rosterLabel = profile?.stationLabel || ''
+  return (
+    <>
+      <div style={{
+        background: '#111', border: '1px solid #2a2a2a',
+        borderRadius: '8px', padding: '10px 14px', marginBottom: '16px',
+        fontSize: '0.8rem', color: '#9ca3af', lineHeight: 1.8,
+      }}>
+        <div style={{ fontWeight: 700, color: '#e5e7eb', marginBottom: '4px' }}>Recall Route</div>
+        <div>Home → {rosterLabel || 'Rostered Stn'} → Recall Stn → {rosterLabel || 'Rostered Stn'} → Home</div>
+      </div>
+
+      <div style={FIELD}>
+        <label style={LABEL_STYLE}>Rostered Station</label>
+        <input type="text" value={values.rosteredStn}
+          onChange={(e) => onChange('rosteredStn', e.target.value)}
+          placeholder={rosterLabel || 'e.g. FS45 - Brooklyn'}
+          style={INPUT_STYLE} />
+        <p style={HELP_STYLE}>Auto-filled from your profile. Edit if different for this recall.</p>
+      </div>
+
+      <div style={FIELD}>
+        <label style={LABEL_STYLE}>Recall Station</label>
+        <input type="text" value={values.recallStn}
+          onChange={(e) => onChange('recallStn', e.target.value)}
+          placeholder="e.g. FS44 - Sunshine" style={INPUT_STYLE} />
+      </div>
+
+      <div style={FIELD}>
+        <label style={LABEL_STYLE}>Home → Rostered Station (one way, km)</label>
+        <input type="number" min="0" step="0.1" placeholder="0.0"
+          value={values.distHomeKm}
+          onChange={(e) => onChange('distHomeKm', e.target.value)}
+          style={INPUT_STYLE} />
+        <p style={HELP_STYLE}>One-way distance. Return leg is automatic (×2). Total route = (this ×2) + (station-to-station ×2).</p>
+      </div>
+
+      <div style={FIELD}>
+        <label style={LABEL_STYLE}>Rostered → Recall Station (one way, km)</label>
+        <input type="number" min="0" step="0.1" placeholder="0.0"
+          value={values.distStnKm}
+          onChange={(e) => onChange('distStnKm', e.target.value)}
+          style={INPUT_STYLE} />
+        <p style={HELP_STYLE}>Leave 0 if recalled to your own rostered station.</p>
+      </div>
+
+      <div style={FIELD}>
+        <label style={LABEL_STYLE}>Incident Number</label>
+        <input type="text" value={values.incidentNumber}
+          onChange={(e) => onChange('incidentNumber', e.target.value)}
+          placeholder="e.g. INC-2026-00123" style={INPUT_STYLE} />
+      </div>
+
+      <div style={FIELD}>
+        <label style={LABEL_STYLE}>Meal Entitlement</label>
+        <select value={values.mealEntitlement}
+          onChange={(e) => onChange('mealEntitlement', e.target.value)}
+          style={{ ...INPUT_STYLE, cursor: 'pointer' }}>
+          <option value="none">No meal allowance</option>
+          <option value="large">Large meal ($20.55)</option>
+          <option value="double">Double meal ($31.45 — 1 small + 1 large for tax)</option>
+        </select>
+        <p style={HELP_STYLE}>Double meal counts as 1 small + 1 large for ATO tax purposes.</p>
+      </div>
+
+      <div style={FIELD}>
+        <label style={LABEL_STYLE}>Pay Number (Callback-Ops / Excess Travel)</label>
+        <input type="text" value={values.payslipPayNbr}
+          onChange={(e) => onChange('payslipPayNbr', e.target.value)}
+          placeholder="e.g. 20.2026" style={INPUT_STYLE} />
+      </div>
+    </>
+  )
+}
+
+// ─── Sub-form: Retain ─────────────────────────────────────────────────────────
+
+function RetainInputs({ values, onChange }) {
+  return (
+    <>
+      <div style={FIELD}>
+        <label style={LABEL_STYLE}>Retain Allowance ($) — Maint stn N/N</label>
+        <input type="number" min="0" step="0.01" placeholder="0.00"
+          value={values.retainAmount}
+          onChange={(e) => onChange('retainAmount', e.target.value)}
+          style={INPUT_STYLE} />
+        <p style={HELP_STYLE}>Payslip line: Maint stn N/N. Check your pay advice for the correct value.</p>
+      </div>
+      <div style={FIELD}>
+        <label style={LABEL_STYLE}>Overnight Cash ($)</label>
+        <input type="number" min="0" step="0.01" placeholder="0.00"
+          value={values.overnightCash}
+          onChange={(e) => onChange('overnightCash', e.target.value)}
+          style={INPUT_STYLE} />
+      </div>
+      <div style={FIELD}>
+        <label style={LABEL_STYLE}>Pay Number</label>
+        <input type="text" value={values.payslipPayNbr}
+          onChange={(e) => onChange('payslipPayNbr', e.target.value)}
+          placeholder="e.g. 20.2026" style={INPUT_STYLE} />
+      </div>
+    </>
+  )
+}
+
+// ─── Sub-form: Standby ────────────────────────────────────────────────────────
+
+function StandbyInputs({ values, onChange, nightMealEligible }) {
+  return (
+    <>
+      <div style={FIELD}>
+        <label style={LABEL_STYLE}>Standby Type</label>
+        <select value={values.standbyType}
+          onChange={(e) => onChange('standbyType', e.target.value)}
+          style={{ ...INPUT_STYLE, cursor: 'pointer' }}>
+          <option value="Standby">Standby — Standby&amp;Dismi on payslip</option>
+          <option value="M&D">M&D — no meal allowance</option>
+        </select>
+      </div>
+
+      <div style={FIELD}>
+        <label style={LABEL_STYLE}>Distance — return km total</label>
+        <input type="number" min="0" step="0.1" placeholder="0.0"
+          value={values.distKm}
+          onChange={(e) => onChange('distKm', e.target.value)}
+          style={INPUT_STYLE} />
+        <p style={HELP_STYLE}>Enter the total return km (both legs combined).</p>
+      </div>
+
+      <div style={FIELD}>
+        <label style={LABEL_STYLE}>Shift</label>
+        <select value={values.shift}
+          onChange={(e) => onChange('shift', e.target.value)}
+          style={{ ...INPUT_STYLE, cursor: 'pointer' }}>
+          <option value="Day">Day — no meal allowance</option>
+          <option value="Night">Night — meal if arrived after 19:00</option>
+        </select>
+      </div>
+
+      {values.shift === 'Night' && values.standbyType !== 'M&D' && (
+        <div style={FIELD}>
+          <label style={LABEL_STYLE}>Arrival Time (24hr)</label>
+          <input type="time" value={values.arrivedTime}
+            onChange={(e) => onChange('arrivedTime', e.target.value)}
+            style={{ ...INPUT_STYLE, colorScheme: 'dark' }} />
+          <div style={{
+            marginTop: '6px', padding: '8px 12px', borderRadius: '6px', fontSize: '0.78rem',
+            background: nightMealEligible ? 'rgba(34,197,94,0.08)' : 'rgba(251,191,36,0.08)',
+            border: `1px solid ${nightMealEligible ? 'rgba(34,197,94,0.3)' : 'rgba(251,191,36,0.3)'}`,
+            color: nightMealEligible ? '#4ade80' : '#fbbf24',
+          }}>
+            {nightMealEligible
+              ? '✓ Arrived after 19:00 — night meal applies'
+              : '⚠ Arrival at or before 19:00 does not qualify for night meal'}
+          </div>
+        </div>
+      )}
+
+      {values.standbyType === 'M&D' && (
+        <div style={{
+          padding: '8px 12px', borderRadius: '6px', marginBottom: '16px',
+          background: 'rgba(107,114,128,0.1)', border: '1px solid rgba(107,114,128,0.3)',
+          fontSize: '0.78rem', color: '#9ca3af',
+        }}>
+          M&D claims have no meal allowance.
+        </div>
+      )}
+
+      <div style={FIELD}>
+        <label style={LABEL_STYLE}>Pay Number (Standby&amp;Dismi)</label>
+        <input type="text" value={values.payslipPayNbr}
+          onChange={(e) => onChange('payslipPayNbr', e.target.value)}
+          placeholder="e.g. 20.2026" style={INPUT_STYLE} />
+      </div>
+    </>
+  )
+}
+
+// ─── Sub-form: Spoilt / Delayed Meal ─────────────────────────────────────────
+
+function SpoiltInputs({ values, onChange }) {
+  const window = getMealWindow(values.shift)
+  const incidentStatus = values.incidentTime
+    ? checkTimeInMealWindow(values.incidentTime, values.shift)
+    : null
+  const statusColor = { inside: '#4ade80', before: '#fbbf24', after: '#fbbf24' }
+  const statusText  = {
+    inside: `✓ Within window (${window.label})`,
+    before: `← Before window (${window.label})`,
+    after:  `→ After window (${window.label})`,
+  }
+
+  return (
+    <>
+      <div style={FIELD}>
+        <label style={LABEL_STYLE}>Meal Type</label>
+        <select value={values.mealType}
+          onChange={(e) => onChange('mealType', e.target.value)}
+          style={{ ...INPUT_STYLE, cursor: 'pointer' }}>
+          <option value="Spoilt">Spoilt — fire call interrupts meal</option>
+          <option value="Delayed">Delayed — held past meal break</option>
+        </select>
+      </div>
+
+      <div style={FIELD}>
+        <label style={LABEL_STYLE}>Shift</label>
+        <select value={values.shift}
+          onChange={(e) => onChange('shift', e.target.value)}
+          style={{ ...INPUT_STYLE, cursor: 'pointer' }}>
+          <option value="Day">Day shift</option>
+          <option value="Night">Night shift</option>
+        </select>
+        <div style={{
+          marginTop: '6px', padding: '6px 12px',
+          background: '#111', border: '1px solid #2a2a2a',
+          borderRadius: '6px', fontSize: '0.78rem', color: '#9ca3af',
+        }}>
+          {values.shift} shift meal window: <strong style={{ color: '#e5e7eb' }}>{window.label}</strong>
+        </div>
+      </div>
+
+      <div style={FIELD}>
+        <label style={LABEL_STYLE}>Incident Time (optional)</label>
+        <input type="time" value={values.incidentTime}
+          onChange={(e) => onChange('incidentTime', e.target.value)}
+          style={{ ...INPUT_STYLE, colorScheme: 'dark' }} />
+        {incidentStatus && incidentStatus !== 'unknown' && (
+          <div style={{
+            marginTop: '6px', padding: '6px 12px', borderRadius: '6px',
+            fontSize: '0.78rem', color: statusColor[incidentStatus] || '#9ca3af',
+          }}>
+            {statusText[incidentStatus]}
+          </div>
+        )}
+      </div>
+
+      <div style={FIELD}>
+        <label style={LABEL_STYLE}>Meal Interrupted At (optional)</label>
+        <input type="time" value={values.mealInterrupted}
+          onChange={(e) => onChange('mealInterrupted', e.target.value)}
+          style={{ ...INPUT_STYLE, colorScheme: 'dark' }} />
+      </div>
+
+      <div style={FIELD}>
+        <label style={LABEL_STYLE}>Return to Station (optional)</label>
+        <input type="time" value={values.returnToStn}
+          onChange={(e) => onChange('returnToStn', e.target.value)}
+          style={{ ...INPUT_STYLE, colorScheme: 'dark' }} />
+        <p style={HELP_STYLE}>These times are for your records only. They do not affect the claim amount.</p>
+      </div>
+    </>
+  )
+}
+
+// ─── Default values per type ──────────────────────────────────────────────────
+
+const DEFAULTS = {
+  recalls: { rosteredStn: '', recallStn: '', distHomeKm: '', distStnKm: '', mealEntitlement: 'none', incidentNumber: '', payslipPayNbr: '' },
+  retain:  { retainAmount: '', overnightCash: '', payslipPayNbr: '' },
+  standby: { standbyType: 'Standby', distKm: '', shift: 'Day', arrivedTime: '', payslipPayNbr: '' },
+  spoilt:  { mealType: 'Spoilt', shift: 'Day', incidentTime: '', mealInterrupted: '', returnToStn: '' },
+}
+
+// ─── Main ClaimForm ───────────────────────────────────────────────────────────
+// financialYearId: passed from NewClaimModal → wired into addClaim for FY + numbering
+
+export default function ClaimForm({ userId, financialYearId, onSuccess, onCancel }) {
+  const { addClaim } = useClaims()
+  const { rates }    = useRates()
+
+  const [claimType, setClaimType]           = useState('recalls')
+  const [date, setDate]                     = useState('')
+  const [fields, setFields]                 = useState({ ...DEFAULTS.recalls })
+  const [breakdown, setBreakdown]           = useState(null)
+  const [adjustedAmount, setAdjustedAmount] = useState(null)
+  const [showCalcLines, setShowCalcLines]   = useState(null)
+  const [submitting, setSubmitting]         = useState(false)
+  const [error, setError]                   = useState(null)
+  const [profile, setProfile]               = useState(null)
+
+  // Load FAT-specific profile extension for pre-fill
+  // Reads from fat_profile_ext (FAT-owned) — not the shared profiles table
+  useEffect(() => {
+    if (!userId) return
+    supabase
+      .from('fat_profile_ext')
+      .select('station_id, rostered_station_label, home_dist_km, home_address, platoon')
+      .eq('user_id', userId)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (data) {
+          setProfile({
+            stationId:    data.station_id,
+            stationLabel: data.rostered_station_label || (data.station_id ? `FS${data.station_id}` : ''),
+            homeDistKm:   data.home_dist_km || 0,
+            homeAddress:  data.home_address || '',
+            platoon:      data.platoon || '',
+          })
+        }
+      })
+  }, [userId])
+
+  // Reset fields when type or profile changes
+  useEffect(() => {
+    const defaults = { ...DEFAULTS[claimType] }
+    if (claimType === 'recalls' && profile?.stationLabel) {
+      defaults.rosteredStn = profile.stationLabel
+      defaults.distHomeKm  = profile.homeDistKm ? String(profile.homeDistKm) : ''
+    }
+    setFields(defaults)
+    setBreakdown(null)
+    setAdjustedAmount(null)
+    setShowCalcLines(null)
+    setError(null)
+  }, [claimType, profile])
+
+  // Auto-calculate on field/rate change
+  useEffect(() => {
+    const num = (v) => Number(v) || 0
+    let result = null
+    try {
+      if (claimType === 'recalls') {
+        result = calcRecallClaim({
+          distHomeKm:      num(fields.distHomeKm),
+          distStnKm:       num(fields.distStnKm),
+          mealEntitlement: fields.mealEntitlement,
+        }, rates)
+      } else if (claimType === 'retain') {
+        result = calcRetainClaim({
+          retainAmount:  num(fields.retainAmount),
+          overnightCash: num(fields.overnightCash),
+        })
+      } else if (claimType === 'standby') {
+        const hasNightMeal = isStandbyNightMealEligible({
+          standbyType: fields.standbyType,
+          shift:       fields.shift,
+          arrivedTime: fields.arrivedTime,
+        })
+        result = calcStandbyClaim({ distKm: num(fields.distKm), hasNightMeal }, rates)
+      } else if (claimType === 'spoilt') {
+        result = calcSpoiltClaim({ mealType: fields.mealType }, rates)
+      }
+    } catch { result = null }
+    setBreakdown(result)
+    setShowCalcLines(null)
+  }, [claimType, fields, rates])
+
+  const handleFieldChange = (key, value) => setFields((prev) => ({ ...prev, [key]: value }))
+
+  const handleShowCalc = () => {
+    const num = (v) => Number(v) || 0
+    let lines = []
+    if (claimType === 'recalls') {
+      lines = buildRecallCalcLines({
+        distHomeKm: num(fields.distHomeKm), distStnKm: num(fields.distStnKm),
+        mealEntitlement: fields.mealEntitlement,
+      }, rates, { rosterStation: fields.rosteredStn || 'Rostered Stn', recallStation: fields.recallStn || 'Recall Stn' })
+    } else if (claimType === 'standby') {
+      lines = buildStandbyCalcLines({
+        distKm: num(fields.distKm), standbyType: fields.standbyType,
+        arrivedTime: fields.arrivedTime, shift: fields.shift,
+      }, rates)
+    } else if (claimType === 'spoilt') {
+      lines = buildSpoiltCalcLines({
+        mealType: fields.mealType, shift: fields.shift,
+        incidentTime: fields.incidentTime, mealInterrupted: fields.mealInterrupted,
+        returnToStn: fields.returnToStn,
+      }, rates)
+    } else if (breakdown) {
+      lines = [
+        '── Retain ──',
+        `Retain allowance: $${breakdown.retainAmount.toFixed(2)}`,
+        breakdown.overnightCash > 0 ? `Overnight cash: $${breakdown.overnightCash.toFixed(2)}` : '',
+        `── Total: $${breakdown.totalAmount.toFixed(2)} ──`,
+      ].filter(Boolean)
+    }
+    setShowCalcLines(lines)
+  }
+
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    setError(null)
+    if (!date) { setError('Please select a date.'); return }
+    if (!breakdown || breakdown.totalAmount <= 0) {
+      setError('Calculated amount must be greater than $0.00.'); return
+    }
+
+    const num = (v) => Number(v) || 0
+    let calcLines = []
+    if (claimType === 'recalls') {
+      calcLines = buildRecallCalcLines(
+        { distHomeKm: num(fields.distHomeKm), distStnKm: num(fields.distStnKm), mealEntitlement: fields.mealEntitlement },
+        rates,
+        { rosterStation: fields.rosteredStn, recallStation: fields.recallStn }
+      )
+    } else if (claimType === 'standby') {
+      calcLines = buildStandbyCalcLines(
+        { distKm: num(fields.distKm), standbyType: fields.standbyType, arrivedTime: fields.arrivedTime, shift: fields.shift },
+        rates
+      )
+    } else if (claimType === 'spoilt') {
+      calcLines = buildSpoiltCalcLines(
+        { mealType: fields.mealType, shift: fields.shift, incidentTime: fields.incidentTime, mealInterrupted: fields.mealInterrupted, returnToStn: fields.returnToStn },
+        rates
+      )
+    }
+
+    const enrichedBreakdown = {
+      ...breakdown,
+      adjustedAmount: adjustedAmount !== null && adjustedAmount !== ''
+        ? roundMoney(Number(adjustedAmount))
+        : null,
+      calcSnapshot: buildCalcSnapshot(claimType, calcLines, rates),
+    }
+
+    setSubmitting(true)
+    try {
+      await addClaim({
+        userId,
+        claimType,
+        date,
+        breakdown: enrichedBreakdown,
+        fields,
+        rates,
+        financialYearId: financialYearId || null,
+      })
+      onSuccess?.()
+    } catch (err) {
+      console.error('[ClaimForm] Submit error:', err)
+      setError(err.message || 'Failed to create claim. Please try again.')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const nightMealEligible = claimType === 'standby'
+    ? isStandbyNightMealEligible({ standbyType: fields.standbyType, shift: fields.shift, arrivedTime: fields.arrivedTime })
+    : false
+
+  const effectiveAmount = adjustedAmount !== null && adjustedAmount !== ''
+    ? roundMoney(Number(adjustedAmount))
+    : breakdown?.totalAmount ?? 0
+
+  const canSubmit = !submitting && breakdown && breakdown.totalAmount > 0
+
+  return (
+    <form onSubmit={handleSubmit} noValidate>
+
+      <div style={FIELD}>
+        <label style={LABEL_STYLE}>Type</label>
+        <select value={claimType} onChange={(e) => setClaimType(e.target.value)}
+          style={{ ...INPUT_STYLE, cursor: 'pointer' }}>
+          {CLAIM_TABLES.map((t) => (
+            <option key={t} value={t}>{CLAIM_TYPE_LABELS[t]}</option>
+          ))}
+        </select>
+      </div>
+
+      <div style={FIELD}>
+        <label style={LABEL_STYLE}>Date</label>
+        <input type="date" value={date} onChange={(e) => setDate(e.target.value)}
+          style={{ ...INPUT_STYLE, colorScheme: 'dark' }} />
+      </div>
+
+      {claimType === 'recalls' && <RecallInputs values={fields} onChange={handleFieldChange} profile={profile} />}
+      {claimType === 'retain'  && <RetainInputs  values={fields} onChange={handleFieldChange} />}
+      {claimType === 'standby' && <StandbyInputs values={fields} onChange={handleFieldChange} nightMealEligible={nightMealEligible} />}
+      {claimType === 'spoilt'  && <SpoiltInputs  values={fields} onChange={handleFieldChange} />}
+
+      {showCalcLines && (
+        <ShowCalcPanel lines={showCalcLines} onClose={() => setShowCalcLines(null)} />
+      )}
+
+      <CalcPreview breakdown={breakdown} rates={rates} onShowCalc={handleShowCalc} />
+
+      {breakdown && (
+        <AdjustedAmountField
+          calculatedAmount={breakdown.totalAmount}
+          adjustedAmount={adjustedAmount}
+          onChange={setAdjustedAmount}
+        />
+      )}
+
+      {!financialYearId && (
+        <div style={{
+          marginBottom: '12px', padding: '8px 12px',
+          background: 'rgba(251,191,36,0.08)', border: '1px solid rgba(251,191,36,0.3)',
+          borderRadius: '6px', fontSize: '0.76rem', color: '#fbbf24',
+        }}>
+          ⚠ No active financial year — claim will be saved without FY assignment.
+        </div>
+      )}
+
+      {error && (
+        <div style={{
+          marginBottom: '16px',
+          background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)',
+          color: '#f87171', borderRadius: '8px', padding: '10px 14px', fontSize: '0.85rem',
+        }}>
+          {error}
+        </div>
+      )}
+
+      <div style={{ display: 'flex', gap: '10px' }}>
+        {onCancel && (
+          <button type="button" onClick={onCancel} disabled={submitting}
+            style={{
+              flex: 1, padding: '10px',
+              background: 'transparent', border: '1px solid #333',
+              borderRadius: '8px', color: '#9ca3af',
+              cursor: submitting ? 'not-allowed' : 'pointer',
+              fontSize: '0.9rem', fontWeight: 600,
+            }}>
+            Cancel
+          </button>
+        )}
+        <button type="submit" disabled={!canSubmit}
+          style={{
+            flex: 1, padding: '10px',
+            background: !canSubmit ? '#7f1d1d' : '#dc2626',
+            border: 'none', borderRadius: '8px',
+            color: 'white',
+            cursor: !canSubmit ? 'not-allowed' : 'pointer',
+            fontSize: '0.9rem', fontWeight: 600,
+            transition: 'background 0.15s',
+          }}>
+          {submitting
+            ? 'Saving…'
+            : `Submit — $${effectiveAmount.toFixed(2)}${adjustedAmount !== null ? ' (Adj)' : ''}`}
+        </button>
+      </div>
+    </form>
+  )
+}

@@ -1,56 +1,25 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabaseClient'
 import Link from 'next/link'
 
 export default function LoginPage() {
+  const router = useRouter()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
   const [showPassword, setShowPassword] = useState(false)
 
-  useEffect(() => {
-    console.log('RUNTIME ORIGIN:', window.location.origin)
-    console.log('SUPABASE URL (runtime test):', process.env.NEXT_PUBLIC_SUPABASE_URL)
-    console.log('SUPABASE KEY EXISTS:', Boolean(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY))
-    fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/auth/v1/health`)
-      .then(res => console.log('SUPABASE REACHABLE STATUS:', res.status))
-      .catch(err => console.error('SUPABASE FETCH ERROR:', err))
-  }, [])
-
   const handleLogin = async (e) => {
     e.preventDefault()
     setError(null)
     setLoading(true)
 
-    // ── DEBUG: verify env vars are reaching the client ──────────────────────
-    console.log('SUPABASE URL:', process.env.NEXT_PUBLIC_SUPABASE_URL)
-    console.log(
-      'SUPABASE KEY:',
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ? 'EXISTS' : 'MISSING'
-    )
-
-    // ── FETCH TEST: confirm Supabase host is reachable ────────────────────
     try {
-      const test = await fetch(process.env.NEXT_PUBLIC_SUPABASE_URL)
-      console.log('SUPABASE FETCH TEST:', test.status)
-    } catch (fetchErr) {
-      console.error('SUPABASE FETCH TEST FAILED:', fetchErr.message)
-    }
-
-    console.log('LOGIN CLICK FIRED')
-
-    try {
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-        options: {
-          redirectTo: window.location.origin,
-        },
-      })
-      console.log('LOGIN RESULT:', { data, error })
+      const { error } = await supabase.auth.signInWithPassword({ email, password })
 
       if (error) {
         setError(error.message)
@@ -58,9 +27,8 @@ export default function LoginPage() {
         return
       }
 
-      window.location.assign('/')
+      router.push('/')
     } catch (err) {
-      console.error('LOGIN CRASH:', err)
       setError('Login failed. Check your connection and try again.')
       setLoading(false)
     }
