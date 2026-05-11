@@ -6,7 +6,7 @@ import { supabase } from '@/lib/supabaseClient'
 import { useClaims } from '@/lib/claims/ClaimsContext'
 import { useRates } from '@/lib/calculations/RatesContext'
 import { useFY } from '@/lib/fy/FinancialYearContext'
-import { CLAIM_TABLES, CLAIM_TYPE_LABELS } from '@/lib/claims/claimTypes'
+import { CLAIM_TYPE_ORDER, CLAIM_TYPE_LABELS } from '@/lib/claims/claimTypes'
 import ClaimForm from '@/components/claims/ClaimForm'
 import ClaimList from '@/components/claims/ClaimList'
 import GroupedClaimList from '@/components/claims/GroupedClaimList'
@@ -547,7 +547,7 @@ export default function HomePage() {
                 My Claims
               </h2>
               <p style={{ margin: 0, fontSize: '0.8rem', color: '#6b7280' }}>
-                {activeFY ? activeFY.label : 'All years'} · Recalls · Retain · Standby · Spoilt meals
+                {activeFY ? activeFY.label : 'All years'} · Recalls · Retain · Standby · Spoilt · Delayed meals
               </p>
             </div>
 
@@ -596,7 +596,7 @@ export default function HomePage() {
                 <select value={filterType} onChange={(e) => setFilterType(e.target.value)}
                   style={selectStyle}>
                   <option value="all">All types</option>
-                  {CLAIM_TABLES.map((t) => (
+                  {CLAIM_TYPE_ORDER.map((t) => (
                     <option key={t} value={t}>{CLAIM_TYPE_LABELS[t]}</option>
                   ))}
                 </select>
