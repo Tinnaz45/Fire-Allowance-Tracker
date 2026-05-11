@@ -6,7 +6,6 @@ import { FinancialYearProvider } from '@/lib/fy/FinancialYearContext'
 export const metadata = {
   title: 'Fire Allowance Tracker',
   description: 'Track recall, retain, standby, and meal claims.',
-  manifest: '/manifest.json',
   appleWebApp: {
     capable: true,
     statusBarStyle: 'default',
@@ -46,6 +45,13 @@ export default function RootLayout({ children }) {
         <RatesProvider>
           <FinancialYearProvider>
             <ClaimsProvider>{children}</ClaimsProvider>
+          </FinancialYearProvider>
+        </RatesProvider>
+      </body>
+    </html>
+  )
+}
+}</ClaimsProvider>
           </FinancialYearProvider>
         </RatesProvider>
       </body>
