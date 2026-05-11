@@ -522,4 +522,118 @@ export default function HomePage() {
             background: '#1a1a1a', border: '1px solid #2a2a2a',
             borderRadius: '16px', padding: '24px',
           }}>
-            {/* Sectio
+            {/* Section header */}
+            <div style={{
+              display: 'flex', alignItems: 'flex-start',
+              justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap',
+            }}>
+              <div>
+                <h2 style={{ margin: '0 0 4px 0', fontSize: '1rem', fontWeight: 700, color: '#f9fafb' }}>
+                  My Claims
+                </h2>
+                <p style={{ margin: 0, fontSize: '0.8rem', color: '#6b7280' }}>
+                  {activeFY ? activeFY.label : 'All years'} · Recalls · Retain · Standby · Spoilt · Delayed meals
+                </p>
+              </div>
+
+              <button
+                onClick={() => setShowNewClaimModal(true)}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: '6px',
+                  padding: '8px 16px', background: '#dc2626', border: 'none',
+                  borderRadius: '8px', color: 'white', fontSize: '0.85rem',
+                  fontWeight: 600, cursor: 'pointer', flexShrink: 0,
+                }}
+              >
+                <span style={{ fontSize: '1.1rem', lineHeight: 1 }}>+</span>
+                New Claim
+              </button>
+            </div>
+
+            {/* ── Tabs + Filters ── */}
+            <div style={{
+              marginTop: '20px',
+              display: 'flex', alignItems: 'center',
+              justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px',
+            }}>
+              {/* Status tabs */}
+              <div style={{
+                display: 'flex', gap: '4px',
+                background: '#111', borderRadius: '10px', padding: '4px',
+                overflowX: 'auto',
+              }}>
+                {[
+                  { key: 'all',     label: 'All' },
+                  { key: 'pending', label: 'Pending' },
+                  { key: 'paid',    label: 'Paid' },
+                  { key: 'payslip', label: '📋 Payslip' },
+                ].map(({ key, label }) => (
+                  <button key={key} onClick={() => setActiveTab(key)}
+                    style={tabStyle(activeTab === key)}>
+                    {label}
+                  </button>
+                ))}
+              </div>
+
+              {/* Sort + Type filter — hidden on Payslip tab */}
+              {activeTab !== 'payslip' && (
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                  <select value={filterType} onChange={(e) => setFilterType(e.target.value)}
+                    style={selectStyle}>
+                    <option value="all">All types</option>
+                    {CLAIM_TYPE_ORDER.map((t) => (
+                      <option key={t} value={t}>{CLAIM_TYPE_LABELS[t]}</option>
+                    ))}
+                  </select>
+
+                  <select value={sortBy} onChange={(e) => setSortBy(e.target.value)}
+                    style={selectStyle}>
+                    <option value="date-desc">Newest first</option>
+                    <option value="date-asc">Oldest first</option>
+                    <option value="type">Sort by type</option>
+                  </select>
+                </div>
+              )}
+            </div>
+
+            {/* ── Claim Content ── */}
+            {activeTab === 'payslip' ? (
+              <GroupedClaimList
+                session={session}
+                activeFY={activeFY}
+              />
+            ) : (
+              <ClaimList
+                activeTab={activeTab}
+                filterType={filterType}
+                sortBy={sortBy}
+                onEdit={setEditingClaim}
+              />
+            )}
+          </div>
+        </div>
+
+        {/* ── New Claim Modal ── */}
+        {showNewClaimModal && (
+          <NewClaimModal
+            session={session}
+            activeFY={activeFY}
+            onClose={() => setShowNewClaimModal(false)}
+            onSuccess={handleClaimSuccess}
+          />
+        )}
+
+        {/* ── Edit Claim Modal ── */}
+        {editingClaim && (
+          <EditClaimModal
+            claim={editingClaim}
+            session={session}
+            activeFY={activeFY}
+            onClose={() => setEditingClaim(null)}
+            onSuccess={handleEditSuccess}
+          />
+        )}
+      </div>
+    </AppShell>
+  )
+}

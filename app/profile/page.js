@@ -231,4 +231,15 @@ export default function ProfilePage() {
               <div style={S.note}>Changing your address only affects future claims. Existing claims retain the address used at creation.</div>
             </div>
             <div style={{ marginTop: '4px', padding: '10px 14px', background: '#111', border: '1px solid #2a2a2a', borderRadius: '8px', fontSize: '0.8rem', color: '#6b7280' }}>
-              Distance is currently entered manually on each claim. Google Maps auto-calculation will be available wh
+              Distance is currently entered manually on each claim. Google Maps auto-calculation will be available when NEXT_PUBLIC_GOOGLE_MAPS_API_KEY is configured.
+            </div>
+          </div>
+
+          <button type="submit" disabled={saving} style={{ ...S.saveBtn, background: saving ? '#7f1d1d' : '#dc2626', cursor: saving ? 'not-allowed' : 'pointer' }}>
+            {saving ? 'Saving…' : 'Save Profile'}
+          </button>
+        </form>
+      </div>
+    </AppShell>
+  )
+}
