@@ -7,7 +7,7 @@
 //   - Spoilt/Delayed: Day/Night windows, time entry, window indicator
 //   - Adjusted amount override with revert
 //   - Show Calculation panel for all types
-//   - Profile pre-fill for rostered station
+//   - Profile pre-fill for rostered stationh
 //   - financialYearId prop wired into addClaim for FY + numbering
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -378,8 +378,8 @@ function SpoiltInputs({ values, onChange }) {
         <select value={values.mealType}
           onChange={(e) => onChange('mealType', e.target.value)}
           style={{ ...INPUT_STYLE, cursor: 'pointer' }}>
-          <option value="Spoilt">Spoilt - fire call interrupts meal</option>
-          <option value="Delayed">Delayed - held past meal break</option>
+          <option value="Spoilt">Spoilt Meal - fire call interrupts meal</option>
+          <option value="Delayed">Delayed Meal - held past meal break</option>
         </select>
       </div>
 
