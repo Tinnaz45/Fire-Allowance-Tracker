@@ -79,10 +79,10 @@ function ShowCalcPanel({ lines, onClose }) {
         <span style={{ fontSize: '0.74rem', fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
           How this is calculated
         </span>
-        <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#6b7280', cursor: 'pointer', fontSize: '1rem', lineHeight: 1 }}>×</button>
+        <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#6b7280', cursor: 'pointer', fontSize: '1rem', lineHeight: 1 }}>x</button>
       </div>
       {lines.map((line, i) => {
-        const isHeader = line.startsWith('──')
+        const isHeader = line.startsWith('--')
         const isTotal  = line.includes('Total:')
         return (
           <div key={i} style={{
@@ -105,12 +105,12 @@ function CalcPreview({ breakdown, rates, onShowCalc }) {
   if (!breakdown) return null
 
   const lines = []
-  if (breakdown.travelAmount > 0)  lines.push(`Travel: $${breakdown.travelAmount.toFixed(2)} (${breakdown.totalKm != null ? `${breakdown.totalKm} km × $${rates.kilometreRate?.toFixed(2) || '0.99'}` : ''})`)
-  if (breakdown.mealieAmount > 0)  lines.push(`Meal allowance: $${breakdown.mealieAmount.toFixed(2)}`)
-  if (breakdown.nightMealie > 0)   lines.push(`Night meal: $${breakdown.nightMealie.toFixed(2)}`)
-  if (breakdown.mealAmount > 0)    lines.push(`Meal allowance: $${breakdown.mealAmount.toFixed(2)}`)
-  if (breakdown.retainAmount > 0)  lines.push(`Retain: $${breakdown.retainAmount.toFixed(2)}`)
-  if (breakdown.overnightCash > 0) lines.push(`Overnight: $${breakdown.overnightCash.toFixed(2)}`)
+  if (breakdown.travelAmount > 0)  lines.push('Travel: $' + breakdown.travelAmount.toFixed(2) + (breakdown.totalKm != null ? ' (' + breakdown.totalKm + ' km x $' + (rates.kilometreRate?.toFixed(2) || '0.99') + ')' : ''))
+  if (breakdown.mealieAmount > 0)  lines.push('Meal allowance: $' + breakdown.mealieAmount.toFixed(2))
+  if (breakdown.nightMealie > 0)   lines.push('Night meal: $' + breakdown.nightMealie.toFixed(2))
+  if (breakdown.mealAmount > 0)    lines.push('Meal allowance: $' + breakdown.mealAmount.toFixed(2))
+  if (breakdown.retainAmount > 0)  lines.push('Retain: $' + breakdown.retainAmount.toFixed(2))
+  if (breakdown.overnightCash > 0) lines.push('Overnight: $' + breakdown.overnightCash.toFixed(2))
 
   return (
     <div style={{
@@ -166,7 +166,7 @@ function AdjustedAmountField({ calculatedAmount, adjustedAmount, onChange }) {
       {isAdjusted && (
         <button type="button" onClick={() => onChange(null)}
           style={{ background: 'none', border: 'none', color: '#6b7280', fontSize: '0.74rem', cursor: 'pointer', marginTop: '4px', padding: 0 }}>
-          ↩ Revert to calculated (${calculatedAmount != null ? calculatedAmount.toFixed(2) : '0.00'})
+          Revert to calculated (${calculatedAmount != null ? calculatedAmount.toFixed(2) : '0.00'})
         </button>
       )}
       {!isAdjusted && (
@@ -188,7 +188,7 @@ function RecallInputs({ values, onChange, profile }) {
         fontSize: '0.8rem', color: '#9ca3af', lineHeight: 1.8,
       }}>
         <div style={{ fontWeight: 700, color: '#e5e7eb', marginBottom: '4px' }}>Recall Route</div>
-        <div>Home → {rosterLabel || 'Rostered Stn'} → Recall Stn → {rosterLabel || 'Rostered Stn'} → Home</div>
+        <div>Home - {rosterLabel || 'Rostered Stn'} - Recall Stn - {rosterLabel || 'Rostered Stn'} - Home</div>
       </div>
 
       <div style={FIELD}>
@@ -208,16 +208,16 @@ function RecallInputs({ values, onChange, profile }) {
       </div>
 
       <div style={FIELD}>
-        <label style={LABEL_STYLE}>Home → Rostered Station (one way, km)</label>
+        <label style={LABEL_STYLE}>Home to Rostered Station (one way, km)</label>
         <input type="number" min="0" step="0.1" placeholder="0.0"
           value={values.distHomeKm}
           onChange={(e) => onChange('distHomeKm', e.target.value)}
           style={INPUT_STYLE} />
-        <p style={HELP_STYLE}>One-way distance. Return leg is automatic (×2). Total route = (this ×2) + (station-to-station ×2).</p>
+        <p style={HELP_STYLE}>One-way distance. Return leg is automatic (x2). Total route = (this x2) + (station-to-station x2).</p>
       </div>
 
       <div style={FIELD}>
-        <label style={LABEL_STYLE}>Rostered → Recall Station (one way, km)</label>
+        <label style={LABEL_STYLE}>Rostered to Recall Station (one way, km)</label>
         <input type="number" min="0" step="0.1" placeholder="0.0"
           value={values.distStnKm}
           onChange={(e) => onChange('distStnKm', e.target.value)}
@@ -239,7 +239,7 @@ function RecallInputs({ values, onChange, profile }) {
           style={{ ...INPUT_STYLE, cursor: 'pointer' }}>
           <option value="none">No meal allowance</option>
           <option value="large">Large meal ($20.55)</option>
-          <option value="double">Double meal ($31.45 — 1 small + 1 large for tax)</option>
+          <option value="double">Double meal ($31.45 - 1 small + 1 large for tax)</option>
         </select>
         <p style={HELP_STYLE}>Double meal counts as 1 small + 1 large for ATO tax purposes.</p>
       </div>
@@ -260,7 +260,7 @@ function RetainInputs({ values, onChange }) {
   return (
     <>
       <div style={FIELD}>
-        <label style={LABEL_STYLE}>Retain Allowance ($) — Maint stn N/N</label>
+        <label style={LABEL_STYLE}>Retain Allowance ($) - Maint stn N/N</label>
         <input type="number" min="0" step="0.01" placeholder="0.00"
           value={values.retainAmount}
           onChange={(e) => onChange('retainAmount', e.target.value)}
@@ -294,13 +294,13 @@ function StandbyInputs({ values, onChange, nightMealEligible }) {
         <select value={values.standbyType}
           onChange={(e) => onChange('standbyType', e.target.value)}
           style={{ ...INPUT_STYLE, cursor: 'pointer' }}>
-          <option value="Standby">Standby — Standby&amp;Dismi on payslip</option>
-          <option value="M&D">M&D — no meal allowance</option>
+          <option value="Standby">Standby - Standby and Dismi on payslip</option>
+          <option value="M&D">M&D - no meal allowance</option>
         </select>
       </div>
 
       <div style={FIELD}>
-        <label style={LABEL_STYLE}>Distance — return km total</label>
+        <label style={LABEL_STYLE}>Distance - return km total</label>
         <input type="number" min="0" step="0.1" placeholder="0.0"
           value={values.distKm}
           onChange={(e) => onChange('distKm', e.target.value)}
@@ -313,8 +313,8 @@ function StandbyInputs({ values, onChange, nightMealEligible }) {
         <select value={values.shift}
           onChange={(e) => onChange('shift', e.target.value)}
           style={{ ...INPUT_STYLE, cursor: 'pointer' }}>
-          <option value="Day">Day — no meal allowance</option>
-          <option value="Night">Night — meal if arrived after 19:00</option>
+          <option value="Day">Day - no meal allowance</option>
+          <option value="Night">Night - meal if arrived after 19:00</option>
         </select>
       </div>
 
@@ -327,12 +327,12 @@ function StandbyInputs({ values, onChange, nightMealEligible }) {
           <div style={{
             marginTop: '6px', padding: '8px 12px', borderRadius: '6px', fontSize: '0.78rem',
             background: nightMealEligible ? 'rgba(34,197,94,0.08)' : 'rgba(251,191,36,0.08)',
-            border: `1px solid ${nightMealEligible ? 'rgba(34,197,94,0.3)' : 'rgba(251,191,36,0.3)'}`,
+            border: '1px solid ' + (nightMealEligible ? 'rgba(34,197,94,0.3)' : 'rgba(251,191,36,0.3)'),
             color: nightMealEligible ? '#4ade80' : '#fbbf24',
           }}>
             {nightMealEligible
-              ? '✓ Arrived after 19:00 — night meal applies'
-              : '⚠ Arrival at or before 19:00 does not qualify for night meal'}
+              ? 'Arrived after 19:00 - night meal applies'
+              : 'Arrival at or before 19:00 does not qualify for night meal'}
           </div>
         </div>
       )}
@@ -348,7 +348,7 @@ function StandbyInputs({ values, onChange, nightMealEligible }) {
       )}
 
       <div style={FIELD}>
-        <label style={LABEL_STYLE}>Pay Number (Standby&amp;Dismi)</label>
+        <label style={LABEL_STYLE}>Pay Number (Standby and Dismi)</label>
         <input type="text" value={values.payslipPayNbr}
           onChange={(e) => onChange('payslipPayNbr', e.target.value)}
           placeholder="e.g. 20.2026" style={INPUT_STYLE} />
@@ -360,15 +360,15 @@ function StandbyInputs({ values, onChange, nightMealEligible }) {
 // ─── Sub-form: Spoilt / Delayed Meal ─────────────────────────────────────────
 
 function SpoiltInputs({ values, onChange }) {
-  const window = getMealWindow(values.shift)
+  const mealWin = getMealWindow(values.shift)
   const incidentStatus = values.incidentTime
     ? checkTimeInMealWindow(values.incidentTime, values.shift)
     : null
   const statusColor = { inside: '#4ade80', before: '#fbbf24', after: '#fbbf24' }
   const statusText  = {
-    inside: `✓ Within window (${window.label})`,
-    before: `← Before window (${window.label})`,
-    after:  `→ After window (${window.label})`,
+    inside: 'Within window (' + mealWin.label + ')',
+    before: 'Before window (' + mealWin.label + ')',
+    after:  'After window (' + mealWin.label + ')',
   }
 
   return (
@@ -378,8 +378,8 @@ function SpoiltInputs({ values, onChange }) {
         <select value={values.mealType}
           onChange={(e) => onChange('mealType', e.target.value)}
           style={{ ...INPUT_STYLE, cursor: 'pointer' }}>
-          <option value="Spoilt">Spoilt — fire call interrupts meal</option>
-          <option value="Delayed">Delayed — held past meal break</option>
+          <option value="Spoilt">Spoilt - fire call interrupts meal</option>
+          <option value="Delayed">Delayed - held past meal break</option>
         </select>
       </div>
 
@@ -396,7 +396,7 @@ function SpoiltInputs({ values, onChange }) {
           background: '#111', border: '1px solid #2a2a2a',
           borderRadius: '6px', fontSize: '0.78rem', color: '#9ca3af',
         }}>
-          {values.shift} shift meal window: <strong style={{ color: '#e5e7eb' }}>{window.label}</strong>
+          {values.shift} shift meal window: <strong style={{ color: '#e5e7eb' }}>{mealWin.label}</strong>
         </div>
       </div>
 
@@ -442,15 +442,24 @@ const DEFAULTS = {
   spoilt:  { mealType: 'Spoilt', shift: 'Day', incidentTime: '', mealInterrupted: '', returnToStn: '' },
 }
 
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+// Returns today's date in YYYY-MM-DD using the user's local timezone.
+// Using toLocaleDateString with 'sv-SE' locale reliably gives YYYY-MM-DD on all
+// browsers including Mobile Safari, with no UTC-offset shift.
+function getTodayLocal() {
+  return new Date().toLocaleDateString('sv-SE')
+}
+
 // ─── Main ClaimForm ───────────────────────────────────────────────────────────
-// financialYearId: passed from NewClaimModal → wired into addClaim for FY + numbering
+// financialYearId: passed from NewClaimModal -> wired into addClaim for FY + numbering
 
 export default function ClaimForm({ userId, financialYearId, onSuccess, onCancel }) {
   const { addClaim } = useClaims()
   const { rates }    = useRates()
 
   const [claimType, setClaimType]           = useState('recalls')
-  const [date, setDate]                     = useState('')
+  const [date, setDate]                     = useState(getTodayLocal)
   const [fields, setFields]                 = useState({ ...DEFAULTS.recalls })
   const [breakdown, setBreakdown]           = useState(null)
   const [adjustedAmount, setAdjustedAmount] = useState(null)
@@ -460,7 +469,7 @@ export default function ClaimForm({ userId, financialYearId, onSuccess, onCancel
   const [profile, setProfile]               = useState(null)
 
   // Load FAT-specific profile extension for pre-fill
-  // Reads from fat_profile_ext (FAT-owned) — not the shared profiles table
+  // Reads from fat_profile_ext (FAT-owned) - not the shared profiles table
   useEffect(() => {
     if (!userId) return
     supabase
@@ -472,7 +481,7 @@ export default function ClaimForm({ userId, financialYearId, onSuccess, onCancel
         if (data) {
           setProfile({
             stationId:    data.station_id,
-            stationLabel: data.rostered_station_label || (data.station_id ? `FS${data.station_id}` : ''),
+            stationLabel: data.rostered_station_label || (data.station_id ? 'FS' + data.station_id : ''),
             homeDistKm:   data.home_dist_km || 0,
             homeAddress:  data.home_address || '',
             platoon:      data.platoon || '',
@@ -481,7 +490,9 @@ export default function ClaimForm({ userId, financialYearId, onSuccess, onCancel
       })
   }, [userId])
 
-  // Reset fields when type or profile changes
+  // Reset fields when type or profile changes.
+  // Note: date is intentionally NOT reset here - it stays as today's date
+  // regardless of claim type switch, and the user can still change it manually.
   useEffect(() => {
     const defaults = { ...DEFAULTS[claimType] }
     if (claimType === 'recalls' && profile?.stationLabel) {
@@ -521,7 +532,7 @@ export default function ClaimForm({ userId, financialYearId, onSuccess, onCancel
       } else if (claimType === 'spoilt') {
         result = calcSpoiltClaim({ mealType: fields.mealType }, rates)
       }
-    } catch { result = null }
+    } catch (err) { result = null }
     setBreakdown(result)
     setShowCalcLines(null)
   }, [claimType, fields, rates])
@@ -549,10 +560,10 @@ export default function ClaimForm({ userId, financialYearId, onSuccess, onCancel
       }, rates)
     } else if (breakdown) {
       lines = [
-        '── Retain ──',
-        `Retain allowance: $${breakdown.retainAmount.toFixed(2)}`,
-        breakdown.overnightCash > 0 ? `Overnight cash: $${breakdown.overnightCash.toFixed(2)}` : '',
-        `── Total: $${breakdown.totalAmount.toFixed(2)} ──`,
+        '-- Retain --',
+        'Retain allowance: $' + breakdown.retainAmount.toFixed(2),
+        breakdown.overnightCash > 0 ? 'Overnight cash: $' + breakdown.overnightCash.toFixed(2) : '',
+        '-- Total: $' + breakdown.totalAmount.toFixed(2) + ' --',
       ].filter(Boolean)
     }
     setShowCalcLines(lines)
@@ -668,7 +679,7 @@ export default function ClaimForm({ userId, financialYearId, onSuccess, onCancel
           background: 'rgba(251,191,36,0.08)', border: '1px solid rgba(251,191,36,0.3)',
           borderRadius: '6px', fontSize: '0.76rem', color: '#fbbf24',
         }}>
-          ⚠ No active financial year — claim will be saved without FY assignment.
+          No active financial year - claim will be saved without FY assignment.
         </div>
       )}
 
@@ -706,8 +717,8 @@ export default function ClaimForm({ userId, financialYearId, onSuccess, onCancel
             transition: 'background 0.15s',
           }}>
           {submitting
-            ? 'Saving…'
-            : `Submit — $${effectiveAmount.toFixed(2)}${adjustedAmount !== null ? ' (Adj)' : ''}`}
+            ? 'Saving...'
+            : 'Submit - $' + effectiveAmount.toFixed(2) + (adjustedAmount !== null ? ' (Adj)' : '')}
         </button>
       </div>
     </form>
