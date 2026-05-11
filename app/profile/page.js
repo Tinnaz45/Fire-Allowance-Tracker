@@ -1,13 +1,13 @@
 'use client'
 
-// Profile Page - placeholder redirect fixed
+// Profile Page
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabaseClient'
+import AppShell from '@/components/nav/AppShell'
 
 const S = {
-  page: { minHeight: '100vh', background: '#0f0f0f', color: '#e5e7eb', padding: '32px 16px', fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif', boxSizing: 'border-box', overflowX: 'hidden' },
-  inner: { maxWidth: '560px', margin: '0 auto' },
+  inner: { maxWidth: '560px', margin: '0 auto', padding: '32px 16px', boxSizing: 'border-box' },
   card: { background: '#1a1a1a', border: '1px solid #2a2a2a', borderRadius: '16px', padding: '24px', marginBottom: '20px' },
   cardTitle: { margin: '0 0 20px 0', fontSize: '0.95rem', fontWeight: 700, color: '#f9fafb', borderBottom: '1px solid #2a2a2a', paddingBottom: '12px' },
   label: { display: 'block', fontSize: '0.78rem', fontWeight: 600, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '6px' },
@@ -18,7 +18,6 @@ const S = {
   stationBadge: { display: 'inline-block', padding: '4px 12px', background: 'rgba(220,38,38,0.12)', border: '1px solid rgba(220,38,38,0.3)', borderRadius: '6px', color: '#fca5a5', fontSize: '0.82rem', fontWeight: 700, letterSpacing: '0.04em', marginTop: '6px' },
   row: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' },
   saveBtn: { width: '100%', padding: '12px', background: '#dc2626', border: 'none', borderRadius: '8px', color: 'white', fontSize: '0.9rem', fontWeight: 600, cursor: 'pointer' },
-  backBtn: { display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '8px 0', background: 'none', border: 'none', color: '#9ca3af', fontSize: '0.85rem', cursor: 'pointer', marginBottom: '24px' },
   success: { background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.3)', color: '#4ade80', borderRadius: '10px', padding: '12px 16px', fontSize: '0.875rem', marginBottom: '16px' },
   error: { background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', color: '#f87171', borderRadius: '8px', padding: '10px 14px', fontSize: '0.85rem', marginBottom: '16px' },
   note: { background: 'rgba(251,191,36,0.08)', border: '1px solid rgba(251,191,36,0.2)', borderRadius: '8px', padding: '10px 14px', fontSize: '0.8rem', color: '#fbbf24', marginTop: '8px' },
@@ -66,7 +65,7 @@ export default function ProfilePage() {
           setFirstName(profile.first_name || '')
           setLastName(profile.last_name || '')
         }
-        // Load FAT-specific profile extension (fat_profile_ext — owned by Fire Allowance Tracker)
+        // Load FAT-specific profile extension
         const { data: ext } = await supabase
           .from('fat_profile_ext')
           .select('home_address, platoon, pay_number, station_id, rostered_station_label')
@@ -108,7 +107,6 @@ export default function ProfilePage() {
     try {
       const stationLabel = stationId ? (stationName ? `FS${stationId} - ${stationName}` : `FS${stationId}`) : ''
 
-      // Save base profile fields (shared table — first_name + last_name only)
       const { error: profileError } = await supabase.from('profiles').upsert({
         id: session.user.id,
         first_name: firstName.trim(),
@@ -116,7 +114,6 @@ export default function ProfilePage() {
       }, { onConflict: 'id' })
       if (profileError) throw profileError
 
-      // Save FAT-specific fields to fat_profile_ext (FAT-owned extension table)
       const { error: extError } = await supabase.from('fat_profile_ext').upsert({
         user_id:                session.user.id,
         home_address:           homeAddress.trim(),
@@ -137,22 +134,27 @@ export default function ProfilePage() {
   }
 
   if (authLoading) {
-    return <div style={{ minHeight: '100vh', background: '#0f0f0f', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#9ca3af' }}>Loading...</div>
+    return (
+      <div style={{ minHeight: '100vh', background: '#0f0f0f', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#9ca3af' }}>
+        Loading…
+      </div>
+    )
   }
   if (!session) return null
 
   const activeStationLabel = stationId ? (stationName ? `FS${stationId} - ${stationName}` : `FS${stationId}`) : null
 
   return (
-    <div style={S.page}>
+    <AppShell>
       <div style={S.inner}>
-        <button style={S.backBtn} onClick={() => router.push('/')}>Back to Dashboard</button>
         <div style={{ marginBottom: '28px' }}>
           <h1 style={{ margin: '0 0 4px', fontSize: '1.35rem', fontWeight: 700, color: '#f9fafb' }}>Profile</h1>
           <p style={{ margin: 0, fontSize: '0.82rem', color: '#6b7280' }}>{session.user.email}</p>
         </div>
+
         {successMsg && <div style={S.success}>&#10003; {successMsg}</div>}
         {errorMsg && <div style={S.error}>{errorMsg}</div>}
+
         <form onSubmit={handleSave} noValidate>
           <div style={S.card}>
             <h2 style={S.cardTitle}>Personal Details</h2>
@@ -172,6 +174,7 @@ export default function ProfilePage() {
               <p style={S.help}>Your employee number for payslip reconciliation.</p>
             </div>
           </div>
+
           <div style={S.card}>
             <h2 style={S.cardTitle}>Operational Details</h2>
             <div style={S.field}>
@@ -218,6 +221,7 @@ export default function ProfilePage() {
               </select>
             </div>
           </div>
+
           <div style={S.card}>
             <h2 style={S.cardTitle}>Home Address</h2>
             <div style={S.field}>
@@ -227,14 +231,4 @@ export default function ProfilePage() {
               <div style={S.note}>Changing your address only affects future claims. Existing claims retain the address used at creation.</div>
             </div>
             <div style={{ marginTop: '4px', padding: '10px 14px', background: '#111', border: '1px solid #2a2a2a', borderRadius: '8px', fontSize: '0.8rem', color: '#6b7280' }}>
-              Distance is currently entered manually on each claim. Google Maps auto-calculation will be available when NEXT_PUBLIC_GOOGLE_MAPS_API_KEY is configured.
-            </div>
-          </div>
-          <button type="submit" disabled={saving} style={{ ...S.saveBtn, background: saving ? '#7f1d1d' : '#dc2626', cursor: saving ? 'not-allowed' : 'pointer' }}>
-            {saving ? 'Saving...' : 'Save Profile'}
-          </button>
-        </form>
-      </div>
-    </div>
-  )
-}
+              Distance is currently entered manually on each claim. Google Maps auto-calculation will be available wh

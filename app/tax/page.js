@@ -22,20 +22,12 @@ import { useClaims } from '@/lib/claims/ClaimsContext'
 import { useRates } from '@/lib/calculations/RatesContext'
 import { useFY } from '@/lib/fy/FinancialYearContext'
 import { calcTaxSummary, roundMoney } from '@/lib/calculations/engine'
+import AppShell from '@/components/nav/AppShell'
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
 const S = {
-  page: {
-    minHeight: '100vh',
-    background: '#0f0f0f',
-    color: '#e5e7eb',
-    padding: '32px 20px',
-    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-    boxSizing: 'border-box',
-    overflowX: 'hidden',
-  },
-  inner: { maxWidth: '640px', margin: '0 auto' },
+  inner: { maxWidth: '640px', margin: '0 auto', padding: '32px 20px', boxSizing: 'border-box' },
   card: {
     background: '#1a1a1a',
     border: '1px solid #2a2a2a',
@@ -54,11 +46,6 @@ const S = {
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  backBtn: {
-    display: 'inline-flex', alignItems: 'center', gap: '6px',
-    padding: '8px 0', background: 'none', border: 'none',
-    color: '#9ca3af', fontSize: '0.85rem', cursor: 'pointer', marginBottom: '24px',
-  },
   row: {
     display: 'flex', justifyContent: 'space-between', alignItems: 'center',
     padding: '12px 0',
@@ -66,11 +53,6 @@ const S = {
   },
   rowLabel: { fontSize: '0.875rem', color: '#d1d5db' },
   rowValue: { fontSize: '0.95rem', fontWeight: 700, color: '#f9fafb' },
-  sectionLabel: {
-    fontSize: '0.72rem', fontWeight: 700, color: '#9ca3af',
-    textTransform: 'uppercase', letterSpacing: '0.05em',
-    margin: '16px 0 4px',
-  },
   totalRow: {
     display: 'flex', justifyContent: 'space-between', alignItems: 'center',
     padding: '14px 0',
@@ -111,7 +93,7 @@ const S = {
   },
 }
 
-// ─── Tax Row ─────────────────────────────────────────────────────────────────
+// ─── Tax Row ──────────────────────────────────────────────────────────────────
 
 function TaxRow({ label, value, sub }) {
   return (
@@ -125,10 +107,7 @@ function TaxRow({ label, value, sub }) {
   )
 }
 
-// ─── CSV Builder ─────────────────────────────────────────────────────────────
-// Uses correct calcTaxSummary() field names:
-//   summary.totalMeals     (was: summary.totalMealCount — FIXED)
-//   totalMealDollars       (was: summary.totalMealDollars — FIXED: computed locally)
+// ─── CSV Builder ──────────────────────────────────────────────────────────────
 
 function buildCSV(summary, totalMealDollars, fyLabel) {
   const rows = [
@@ -153,9 +132,9 @@ export default function TaxPage() {
   const { rates, loadRates }   = useRates()
   const { activeFY, loadFYs }  = useFY()
 
-  const [session, setSession]   = useState(null)
+  const [session, setSession]         = useState(null)
   const [authLoading, setAuthLoading] = useState(true)
-  const [copied, setCopied]     = useState(false)
+  const [copied, setCopied]           = useState(false)
 
   // ── Auth ──────────────────────────────────────────────────────────────────
 
@@ -185,20 +164,12 @@ export default function TaxPage() {
   })()
 
   // ── Compute summary ───────────────────────────────────────────────────────
-  // calcTaxSummary() returns:
-  //   smallMealCount, smallMealTotal, largeMealCount, largeMealTotal,
-  //   totalMeals, travelKm, travelRate, travelTotal, grandTotal
-  //
-  // totalMealDollars is NOT returned by the engine — computed here as:
-  //   smallMealTotal + largeMealTotal
 
-  const summary = calcTaxSummary(fyClaims, rates)
+  const summary          = calcTaxSummary(fyClaims, rates)
   const totalMealDollars = roundMoney(summary.smallMealTotal + summary.largeMealTotal)
+  const grandTotal       = summary.grandTotal.toFixed(2)
 
-  // grandTotal is returned directly from calcTaxSummary() — no local recompute needed
-  const grandTotal = summary.grandTotal.toFixed(2)
-
-  // ── Export: Copy ──────────────────────────────────────────────────────────
+  // ── Export handlers ───────────────────────────────────────────────────────
 
   const handleCopy = async () => {
     const lines = [
@@ -221,8 +192,6 @@ export default function TaxPage() {
     }
   }
 
-  // ── Export: CSV ───────────────────────────────────────────────────────────
-
   const handleDownloadCSV = () => {
     const csv  = buildCSV(summary, totalMealDollars, activeFY?.label || 'All')
     const blob = new Blob([csv], { type: 'text/csv' })
@@ -234,11 +203,7 @@ export default function TaxPage() {
     URL.revokeObjectURL(url)
   }
 
-  // ── Export: PDF (print dialog) ────────────────────────────────────────────
-
-  const handleDownloadPDF = () => {
-    window.print()
-  }
+  const handleDownloadPDF = () => { window.print() }
 
   // ── Guards ────────────────────────────────────────────────────────────────
 
@@ -253,12 +218,8 @@ export default function TaxPage() {
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
-    <div style={S.page}>
+    <AppShell>
       <div style={S.inner}>
-
-        <button style={S.backBtn} onClick={() => router.push('/')}>
-          ← Dashboard
-        </button>
 
         <div style={{ marginBottom: '28px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
@@ -316,14 +277,8 @@ export default function TaxPage() {
                 <span>Travel Allowance</span>
               </div>
 
-              <TaxRow
-                label="Total km travelled"
-                value={`${summary.travelKm.toFixed(1)} km`}
-              />
-              <TaxRow
-                label="Rate (per km)"
-                value={`$${summary.travelRate.toFixed(2)}/km`}
-              />
+              <TaxRow label="Total km travelled" value={`${summary.travelKm.toFixed(1)} km`} />
+              <TaxRow label="Rate (per km)" value={`$${summary.travelRate.toFixed(2)}/km`} />
 
               <div style={S.totalRow}>
                 <span style={S.totalLabel}>Travel Total</span>
@@ -372,6 +327,7 @@ export default function TaxPage() {
         )}
 
       </div>
-    </div>
+    </AppShell>
   )
 }
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              
