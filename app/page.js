@@ -11,6 +11,7 @@ import ClaimForm from '@/components/claims/ClaimForm'
 import ClaimList from '@/components/claims/ClaimList'
 import GroupedClaimList from '@/components/claims/GroupedClaimList'
 import AppShell from '@/components/nav/AppShell'
+import RecentActivitySection from '@/components/dashboard/RecentActivitySection'
 
 // ─── Shared input styles ──────────────────────────────────────────────────────
 
@@ -516,6 +517,9 @@ export default function HomePage() {
               ✓ {successMessage}
             </div>
           )}
+
+          {/* ── Recent Activity Section ── */}
+          <RecentActivitySection onEdit={setEditingClaim} />
 
           {/* ── Claims Section ── */}
           <div style={{
