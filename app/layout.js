@@ -51,10 +51,3 @@ export default function RootLayout({ children }) {
     </html>
   )
 }
-}</ClaimsProvider>
-          </FinancialYearProvider>
-        </RatesProvider>
-      </body>
-    </html>
-  )
-}
