@@ -306,7 +306,7 @@ export default function TaxPage() {
               </div>
 
               <div style={{ marginTop: '8px', fontSize: '0.74rem', color: '#6b7280' }}>
-                Double meal claims counted as 1 small + 1 large. Spoilt/Delayed meals counted as 1 small.
+                Double meal claims counted as 1 small + 1 large. Spoilt Meal and Delayed Meal claims counted as 1 small.
               </div>
             </div>
 
