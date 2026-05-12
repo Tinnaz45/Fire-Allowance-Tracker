@@ -92,11 +92,19 @@ function QuickPayToggle({ claim, session, activeFY }) {
   )
 }
 
+// ChildClaimRow — CANONICAL TRUTH: payment_status.
+// QuickPayToggle updates payment_status (canonical) per sub-claim.
+// cycleStatus updates the legacy status field for backward compat on old rows.
+// PaymentStatusBadge is the primary payment indicator (uses payment_status).
+// Legacy StatusBadge (status field) preserved as secondary — may be removed
+// in a future cleanup once all rows have payment_status set.
+
 function ChildClaimRow({ claim, session, activeFY, isLast }) {
   const { updateChildStatus } = useClaims()
   const [updating, setUpdating] = useState(false)
   const label  = resolveChildLabel(claim)
   const amt    = resolveComponentAmount(claim)
+  // LEGACY: status field kept for backward compat (old rows without payment_status)
   const status = claim.status || 'Pending'
   const cycleStatus = async () => {
     if (updating || !session) return
@@ -119,9 +127,11 @@ function ChildClaimRow({ claim, session, activeFY, isLast }) {
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
         <span style={{ fontSize: '0.88rem', fontWeight: 700, color: '#f9fafb', fontVariantNumeric: 'tabular-nums' }}>${amt.toFixed(2)}</span>
-        <PaymentStatusBadge paymentStatus={claim.payment_status} />
+        {/* CANONICAL: PaymentStatusBadge from payment_status. Normalize NULL → Pending. */}
+        <PaymentStatusBadge paymentStatus={claim.payment_status || 'Pending'} />
         <QuickPayToggle claim={claim} session={session} activeFY={activeFY} />
-        <button onClick={cycleStatus} disabled={updating} title="Click to cycle: Pending → Paid → Disputed" style={{ background: 'none', border: 'none', padding: 0, cursor: updating ? 'wait' : 'pointer', opacity: updating ? 0.5 : 1 }}>
+        {/* LEGACY compat: clickable status badge for old rows — secondary display only */}
+        <button onClick={cycleStatus} disabled={updating} title="Legacy status (secondary)" style={{ background: 'none', border: 'none', padding: 0, cursor: updating ? 'wait' : 'pointer', opacity: updating ? 0.5 : 1 }}>
           <StatusBadge status={status} />
         </button>
       </div>
@@ -129,22 +139,34 @@ function ChildClaimRow({ claim, session, activeFY, isLast }) {
   )
 }
 
+// GroupCard — CANONICAL TRUTH: derivedPaymentStatus, paidCount, totalCount.
+// All payment display and totals derive from payment_status only — no status fallback.
+
 function GroupCard({ groupEntry, session, activeFY }) {
-  const { group, children, derivedPaymentStatus } = groupEntry
+  // Destructure normalized fields from groupedView (computed in ClaimsContext)
+  const { group, children, derivedPaymentStatus, paidCount, totalCount } = groupEntry
   const [collapsed, setCollapsed] = useState(false)
+
+  // NORMALIZED: overdue uses derivedPaymentStatus (canonical), not parent_status
   const isOverdue = (() => {
-    if ((group.parent_status || '').toLowerCase() !== 'pending') return false
+    if ((derivedPaymentStatus || '').toLowerCase() !== 'pending') return false
     if (!group.overdue_at) return false
     return new Date() > new Date(group.overdue_at)
   })()
+
   const totalAmt = children.reduce((sum, c) => sum + resolveComponentAmount(c), 0)
+
+  // CANONICAL: paid amount from payment_status only
   const paidAmt = children
-    .filter((c) => c.payment_status != null ? (c.payment_status || '').toLowerCase() === 'paid' : (c.status || '').toLowerCase() === 'paid')
+    .filter((c) => (c.payment_status || 'Pending').toLowerCase() === 'paid')
     .reduce((sum, c) => sum + resolveComponentAmount(c), 0)
-  const pendingCount = children.filter((c) => c.payment_status != null ? (c.payment_status || '').toLowerCase() !== 'paid' : (c.status || '').toLowerCase() === 'pending').length
-  const hasPaymentTracking = children.some((c) => c.payment_status != null)
+
+  // CANONICAL: pending count from paidCount + totalCount (from ClaimsContext)
+  const pendingCount = totalCount - paidCount
+
+  // Payment badge always derived from derivedPaymentStatus (canonical truth)
   const paymentBadge = (() => {
-    if (!hasPaymentTracking) return null
+    if (totalCount === 0) return null
     if (derivedPaymentStatus === 'Paid') return { text: '✓ All Paid', color: '#86efac', bg: 'rgba(34,197,94,0.12)', border: 'rgba(34,197,94,0.4)' }
     return { text: pendingCount + ' Pending', color: '#fde68a', bg: 'rgba(234,179,8,0.08)', border: 'rgba(234,179,8,0.25)' }
   })()
@@ -166,7 +188,8 @@ function GroupCard({ groupEntry, session, activeFY }) {
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
           {isOverdue && <span style={{ fontSize: '0.64rem', fontWeight: 700, color: '#f87171', background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.35)', borderRadius: '4px', padding: '2px 6px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>🚩 Overdue</span>}
           {paymentBadge && <span style={{ fontSize: '0.65rem', fontWeight: 700, color: paymentBadge.color, background: paymentBadge.bg, border: '1px solid ' + paymentBadge.border, borderRadius: '5px', padding: '2px 7px', letterSpacing: '0.03em' }}>{paymentBadge.text}</span>}
-          <StatusBadge status={group.parent_status} />
+          {/* CANONICAL: show derivedPaymentStatus badge, not DB parent_status */}
+          <StatusBadge status={derivedPaymentStatus} />
         </div>
       </div>
       {!collapsed && children.length > 0 && (
@@ -231,9 +254,18 @@ export default function GroupedClaimList({ session, activeFY, onEdit }) {
   )
 
   const { grouped, ungrouped } = groupedView || { grouped: [], ungrouped: [] }
-  const pendingGroups = grouped.filter((g) => (g.group.parent_status || '').toLowerCase() !== 'paid')
-  const paidGroups    = grouped.filter((g) => (g.group.parent_status || '').toLowerCase() === 'paid')
-  const overdueCount  = pendingGroups.filter((g) => g.group.overdue_at && new Date() > new Date(g.group.overdue_at)).length
+
+  // NORMALIZED: filter by derivedPaymentStatus (canonical), not group.parent_status
+  const pendingGroups = grouped.filter((g) => (g.derivedPaymentStatus || '').toLowerCase() !== 'paid')
+  const paidGroups    = grouped.filter((g) => (g.derivedPaymentStatus || '').toLowerCase() === 'paid')
+
+  // NORMALIZED: overdue detection uses derivedPaymentStatus
+  const overdueCount  = pendingGroups.filter((g) =>
+    (g.derivedPaymentStatus || '').toLowerCase() === 'pending' &&
+    g.group.overdue_at &&
+    new Date() > new Date(g.group.overdue_at)
+  ).length
+
   const hasContent    = pendingGroups.length > 0 || ungrouped.length > 0
 
   return (
@@ -262,31 +294,4 @@ export default function GroupedClaimList({ session, activeFY, onEdit }) {
         </div>
       )}
 
-      {ungrouped.filter((c) => (c.status || '').toLowerCase() === 'pending').length > 0 && (
-        <div style={{ marginTop: pendingGroups.length > 0 ? '16px' : '0' }}>
-          <div style={{ fontSize: '0.71rem', fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '10px' }}>
-            Ungrouped Pending
-          </div>
-          {ungrouped
-            .filter((c) => (c.status || '').toLowerCase() === 'pending')
-            .map((claim) => (
-              <UngroupedCard key={claim.claimType + '-' + claim.id} claim={claim} onEdit={onEdit} session={session} activeFY={activeFY} />
-            ))}
-        </div>
-      )}
-
-      {paidGroups.length > 0 && (
-        <details style={{ marginTop: '24px' }}>
-          <summary style={{ cursor: 'pointer', fontSize: '0.71rem', fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '10px', userSelect: 'none' }}>
-            Paid ({paidGroups.length}) — click to expand
-          </summary>
-          <div style={{ marginTop: '10px' }}>
-            {paidGroups.map((entry) => (
-              <GroupCard key={entry.group.id} groupEntry={entry} session={session} activeFY={activeFY} />
-            ))}
-          </div>
-        </details>
-      )}
-    </div>
-  )
-}
+      {ungrouped
