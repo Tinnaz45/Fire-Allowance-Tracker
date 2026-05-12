@@ -788,4 +788,14 @@ export default function ExpandableClaimList({
         alignItems: 'center',
         fontSize: '0.78rem',
         color: '#6b7280',
-        flexWrap: 'w
+        flexWrap: 'wrap',
+        gap: '6px',
+      }}>
+        <span>{itemCount} claim{itemCount !== 1 ? 's' : ''}</span>
+        <span style={{ fontVariantNumeric: 'tabular-nums', color: '#9ca3af', fontWeight: 600 }}>
+          Total: ${grandTotal.toFixed(2)}
+        </span>
+      </div>
+    </div>
+  )
+}

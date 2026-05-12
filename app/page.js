@@ -610,112 +610,119 @@ export default function HomePage() {
                   <button
                     onClick={() => setShowAdvancedFilters((v) => !v)}
                     style={{
-                      padding: '6px 10px',
-                      background: showAdvancedFilters ? 'rgba(220,38,38,0.15)' : '#111',
-                      border: `1px solid ${showAdvancedFilters ? 'rgba(220,38,38,0.4)' : '#2a2a2a'}`,
+                      ...selectStyle,
+                      background: showAdvancedFilters ? 'rgba(220,38,38,0.1)' : '#111',
+                      border: showAdvancedFilters ? '1px solid rgba(220,38,38,0.3)' : '1px solid #2a2a2a',
                       borderRadius: '7px',
-                      color: showAdvancedFilters ? '#fca5a5' : '#9ca3af',
-                      fontSize: '0.82rem',
+                      color: showAdvancedFilters ? '#fca5a5' : '#6b7280',
                       cursor: 'pointer',
-                      outline: 'none',
+                      fontSize: '0.82rem',
+                      fontWeight: 600,
+                      padding: '8px 14px',
                       whiteSpace: 'nowrap',
                     }}
                   >
-                    {showAdvancedFilters ? 'Hide filters' : 'More filters'}
+                    {showAdvancedFilters ? '▲ Less' : '▼ More filters'}
                   </button>
                 </div>
-              )}
-            </div>
 
-            {/* ── Advanced Filters (Phase 4) ── */}
-            {showAdvancedFilters && activeTab !== 'payslip' && activeTab !== 'petty-cash' && (
-              <div style={{
-                marginTop: '12px',
-                padding: '14px 16px',
-                background: '#111',
-                border: '1px solid #2a2a2a',
-                borderRadius: '10px',
-                display: 'flex',
-                gap: '12px',
-                flexWrap: 'wrap',
-                alignItems: 'flex-end',
-              }}>
-                <div>
-                  <label style={{ ...LABEL_STYLE, marginBottom: '4px' }}>Payment method</label>
-                  <select
-                    value={paymentMethodFilter}
-                    onChange={(e) => setPaymentMethodFilter(e.target.value)}
-                    style={selectStyle}
-                  >
-                    <option value="all">All methods</option>
-                    <option value="Payslip">Payslip</option>
-                    <option value="Petty Cash">Petty Cash</option>
-                  </select>
-                </div>
-                <div>
-                  <label style={{ ...LABEL_STYLE, marginBottom: '4px' }}>Paid from</label>
-                  <input
-                    type="date"
-                    value={paymentDateFrom}
-                    onChange={(e) => setPaymentDateFrom(e.target.value)}
-                    style={{ ...selectStyle, colorScheme: 'dark' }}
-                  />
-                </div>
-                <div>
-                  <label style={{ ...LABEL_STYLE, marginBottom: '4px' }}>Paid to</label>
-                  <input
-                    type="date"
-                    value={paymentDateTo}
-                    onChange={(e) => setPaymentDateTo(e.target.value)}
-                    style={{ ...selectStyle, colorScheme: 'dark' }}
-                  />
-                </div>
-                {(paymentMethodFilter !== 'all' || paymentDateFrom || paymentDateTo) && (
-                  <button
-                    onClick={() => {
-                      setPaymentMethodFilter('all')
-                      setPaymentDateFrom('')
-                      setPaymentDateTo('')
-                    }}
-                    style={{
-                      padding: '6px 12px',
-                      background: 'transparent',
-                      border: '1px solid #333',
-                      borderRadius: '7px',
-                      color: '#6b7280',
-                      fontSize: '0.8rem',
-                      cursor: 'pointer',
-                    }}
-                  >
-                    Clear
-                  </button>
+                {/* ── Advanced Filters (Phase 4) ── */}
+                {showAdvancedFilters && activeTab !== 'payslip' && activeTab !== 'petty-cash' && (
+                  <div style={{
+                    display: 'flex',
+                    gap: '10px',
+                    flexWrap: 'wrap',
+                    padding: '12px 14px',
+                    background: 'rgba(220,38,38,0.04)',
+                    border: '1px solid rgba(220,38,38,0.15)',
+                    borderRadius: '8px',
+                    marginTop: '4px',
+                  }}>
+                    {/* Payment method filter */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', minWidth: '140px' }}>
+                      <label style={LABEL_STYLE}>Payment Method</label>
+                      <select
+                        value={paymentMethodFilter || 'all'}
+                        onChange={(e) => setPaymentMethodFilter(e.target.value === 'all' ? undefined : e.target.value)}
+                        style={selectStyle}
+                      >
+                        <option value="all">All methods</option>
+                        <option value="Payslip">Payslip</option>
+                        <option value="Petty Cash">Petty Cash</option>
+                      </select>
+                    </div>
+
+                    {/* Paid from date */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', minWidth: '140px' }}>
+                      <label style={LABEL_STYLE}>Paid From</label>
+                      <input
+                        type="date"
+                        value={paymentDateFrom}
+                        onChange={(e) => setPaymentDateFrom(e.target.value)}
+                        style={selectStyle}
+                      />
+                    </div>
+
+                    {/* Paid to date */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', minWidth: '140px' }}>
+                      <label style={LABEL_STYLE}>Paid To</label>
+                      <input
+                        type="date"
+                        value={paymentDateTo}
+                        onChange={(e) => setPaymentDateTo(e.target.value)}
+                        style={selectStyle}
+                      />
+                    </div>
+
+                    {/* Clear filters */}
+                    <div style={{ display: 'flex', alignItems: 'flex-end' }}>
+                      <button
+                        onClick={() => {
+                          setPaymentMethodFilter(undefined)
+                          setPaymentDateFrom('')
+                          setPaymentDateTo('')
+                        }}
+                        style={{
+                          padding: '8px 14px',
+                          background: 'transparent',
+                          border: '1px solid #333',
+                          borderRadius: '7px',
+                          color: '#6b7280',
+                          cursor: 'pointer',
+                          fontSize: '0.82rem',
+                          fontWeight: 600,
+                        }}
+                      >
+                        Clear
+                      </button>
+                    </div>
+                  </div>
                 )}
               </div>
-            )}
 
-            {/* ── Claim Content ── */}
-            {activeTab === 'payslip' ? (
-              <GroupedClaimList
-                session={session}
-                activeFY={activeFY}
-              />
-            ) : activeTab === 'petty-cash' ? (
-              <ExpandableClaimList
-                session={session}
-                activeFY={activeFY}
-                paymentMethod="Petty Cash"
-              />
-            ) : (
-              <ExpandableClaimList
-                activeTab={activeTab}
-                filterType={filterType}
-                sortBy={sortBy}
-                paymentMethodFilter={paymentMethodFilter}
-                paymentDateFrom={paymentDateFrom}
-                paymentDateTo={paymentDateTo}
-                onEdit={setEditingClaim}
-              />
-            )}
+              {/* ── Claim content: three-way render ── */}
+              {activeTab === 'payslip' ? (
+                <GroupedClaimList session={session} activeFY={activeFY} />
+              ) : activeTab === 'petty-cash' ? (
+                <ExpandableClaimList
+                  session={session}
+                  activeFY={activeFY}
+                  paymentMethod="Petty Cash"
+                />
+              ) : (
+                <ExpandableClaimList
+                  activeTab={activeTab}
+                  filterType={filterType}
+                  sortBy={sortBy}
+                  paymentMethodFilter={paymentMethodFilter}
+                  paymentDateFrom={paymentDateFrom}
+                  paymentDateTo={paymentDateTo}
+                  onEdit={setEditingClaim}
+                  session={session}
+                  activeFY={activeFY}
+                />
+              )}
+            </div>
           </div>
         </div>
 

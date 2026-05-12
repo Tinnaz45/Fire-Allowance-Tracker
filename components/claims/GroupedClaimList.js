@@ -294,4 +294,27 @@ export default function GroupedClaimList({ session, activeFY, onEdit }) {
         </div>
       )}
 
-      {ungrouped
+      {ungrouped.length > 0 && (
+        <div style={{ marginTop: pendingGroups.length > 0 ? '20px' : '0' }}>
+          <div style={{ fontSize: '0.71rem', fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '10px' }}>
+            Other Claims ({ungrouped.length})
+          </div>
+          {ungrouped.map((claim) => (
+            <UngroupedCard key={claim.claimType + '-' + claim.id} claim={claim} onEdit={onEdit} session={session} activeFY={activeFY} />
+          ))}
+        </div>
+      )}
+
+      {paidGroups.length > 0 && (
+        <div style={{ marginTop: '20px' }}>
+          <div style={{ fontSize: '0.71rem', fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '10px' }}>
+            Paid ({paidGroups.length})
+          </div>
+          {paidGroups.map((entry) => (
+            <GroupCard key={entry.group.id} groupEntry={entry} session={session} activeFY={activeFY} />
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
