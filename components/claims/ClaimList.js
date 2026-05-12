@@ -7,6 +7,8 @@
 // - Dates displayed as DD/MM/YY
 // - Overdue claims (pending > 4 weeks): red outline + yellow background
 // - Adjusted amounts shown with "Adj" label
+// Phase 2: PaymentMethodBadge shown on claims with payment_method set.
+//          Legacy claims (payment_method = null) render unchanged.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { useClaims } from '@/lib/claims/ClaimsContext'
@@ -61,6 +63,27 @@ function StatusBadge({ status }) {
   )
 }
 
+// ─── Payment Method Badge (Phase 2) ──────────────────────────────────────────
+// Shown on claims that have payment_method set. NULL = legacy claim (no badge).
+
+function PaymentMethodBadge({ method }) {
+  if (!method) return null
+  const isPayslip = method === 'Payslip'
+  return (
+    <span style={{
+      display: 'inline-flex', alignItems: 'center', gap: '3px',
+      padding: '1px 6px', borderRadius: '4px',
+      fontSize: '0.62rem', fontWeight: 700, letterSpacing: '0.03em',
+      flexShrink: 0, textTransform: 'uppercase',
+      background: isPayslip ? 'rgba(99,102,241,0.12)' : 'rgba(251,146,60,0.12)',
+      border: isPayslip ? '1px solid rgba(99,102,241,0.35)' : '1px solid rgba(251,146,60,0.35)',
+      color: isPayslip ? '#a5b4fc' : '#fdba74',
+    }}>
+      {isPayslip ? '📋 Payslip' : '💵 Petty Cash'}
+    </span>
+  )
+}
+
 // ─── Mobile Card ─────────────────────────────────────────────────────────────
 
 function MobileClaimCard({ claim, onEdit }) {
@@ -104,6 +127,12 @@ function MobileClaimCard({ claim, onEdit }) {
               <span style={{ fontSize: '0.68rem', color: '#fbbf24', marginLeft: '6px', fontWeight: 600 }}>Adj</span>
             )}
           </div>
+          {/* Phase 2: payment method badge (only if set) */}
+          {claim.payment_method && (
+            <div style={{ marginTop: '4px' }}>
+              <PaymentMethodBadge method={claim.payment_method} />
+            </div>
+          )}
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '8px', flexShrink: 0 }}>
           <StatusBadge status={claim.status} />
@@ -255,8 +284,8 @@ export default function ClaimList({ activeTab = 'all', filterType = 'all', sortB
           </thead>
           <tbody>
             {displayed.map((claim) => {
-              const amt     = resolveEffectiveAmount(claim)
-              const overdue = isClaimOverdue(claim)
+              const amt      = resolveEffectiveAmount(claim)
+              const overdue  = isClaimOverdue(claim)
               const adjusted = isAmountAdjusted(claim)
               return (
                 <tr key={`${claim.claimType}-${claim.id}`} style={{
@@ -271,7 +300,11 @@ export default function ClaimList({ activeTab = 'all', filterType = 'all', sortB
                     )}
                   </td>
                   <td style={{ padding: '12px 14px', color: '#9ca3af' }}>
-                    {CLAIM_TYPE_LABELS[claim.claimType] || claim.claimType}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                      <span>{CLAIM_TYPE_LABELS[claim.claimType] || claim.claimType}</span>
+                      {/* Phase 2: payment method badge (only shown if set) */}
+                      {claim.payment_method && <PaymentMethodBadge method={claim.payment_method} />}
+                    </div>
                   </td>
                   <td style={{ padding: '12px 14px', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
                     ${amt.toFixed(2)}

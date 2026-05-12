@@ -6,10 +6,13 @@ import { supabase } from '@/lib/supabaseClient'
 import { useClaims } from '@/lib/claims/ClaimsContext'
 import { useRates } from '@/lib/calculations/RatesContext'
 import { useFY } from '@/lib/fy/FinancialYearContext'
-import { CLAIM_TABLES, CLAIM_TYPE_LABELS } from '@/lib/claims/claimTypes'
+import { CLAIM_TYPE_ORDER, CLAIM_TYPE_LABELS } from '@/lib/claims/claimTypes'
 import ClaimForm from '@/components/claims/ClaimForm'
-import ClaimList from '@/components/claims/ClaimList'
+import ExpandableClaimList from '@/components/claims/ExpandableClaimList'
 import GroupedClaimList from '@/components/claims/GroupedClaimList'
+import AppShell from '@/components/nav/AppShell'
+import RecentActivitySection from '@/components/dashboard/RecentActivitySection'
+import ReconciliationSummary from '@/components/dashboard/ReconciliationSummary'
 
 // ─── Shared input styles ──────────────────────────────────────────────────────
 
@@ -350,11 +353,15 @@ export default function HomePage() {
   const [editingClaim, setEditingClaim] = useState(null)
   const [successMessage, setSuccessMessage] = useState(null)
 
-  // ── Tab + filter state ────────────────────────────────────────────────────
-  // activeTab: 'all' | 'pending' | 'paid' | 'payslip'
+  // activeTab: 'all' | 'pending' | 'paid' | 'payslip' | 'petty-cash'
   const [activeTab, setActiveTab] = useState('all')
   const [sortBy, setSortBy] = useState('date-desc')
   const [filterType, setFilterType] = useState('all')
+  // Phase 4: additional filters
+  const [paymentMethodFilter, setPaymentMethodFilter] = useState('all') // 'all' | 'Payslip' | 'Petty Cash'
+  const [paymentDateFrom, setPaymentDateFrom] = useState('')
+  const [paymentDateTo, setPaymentDateTo] = useState('')
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false)
 
   // ── Auth ──────────────────────────────────────────────────────────────────
 
@@ -373,8 +380,6 @@ export default function HomePage() {
     })
     return () => { listener.subscription.unsubscribe() }
   }, [])
-
-  // ── Load FYs first, then claims re-load whenever active FY changes ────────
 
   useEffect(() => {
     if (!sessionResolved || !session) return
@@ -455,199 +460,159 @@ export default function HomePage() {
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
-    <div style={{
-      minHeight: '100vh',
-      background: '#0f0f0f',
-      color: '#e5e7eb',
-      padding: '24px 16px',
-      fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-      boxSizing: 'border-box',
-      overflowX: 'hidden',
-    }}>
-      <div style={{ maxWidth: '800px', margin: '0 auto' }}>
+    <AppShell>
+      <div style={{
+        color: '#e5e7eb',
+        padding: '24px 16px',
+        boxSizing: 'border-box',
+        overflowX: 'hidden',
+      }}>
+        <div style={{ maxWidth: '800px', margin: '0 auto' }}>
 
-        {/* ── Header ── */}
-        <div style={{
-          display: 'flex', alignItems: 'center',
-          justifyContent: 'space-between',
-          marginBottom: '32px', flexWrap: 'wrap', gap: '12px',
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <div style={{
-              width: '40px', height: '40px', background: '#dc2626',
-              borderRadius: '10px', display: 'flex', alignItems: 'center',
-              justifyContent: 'center', flexShrink: 0,
-            }}>
-              <svg width="22" height="22" fill="none" stroke="white" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                  d="M17.657 18.657A8 8 0 016.343 7.343S7 9 9 10c0-2 .5-5 2.986-7C14 5 16.09 5.777 17.656 7.343A7.975 7.975 0 0120 13a7.975 7.975 0 01-2.343 5.657z" />
-              </svg>
-            </div>
-            <div>
-              <h1 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 700, color: '#f9fafb' }}>
-                Fire Allowance Tracker
-              </h1>
-              <p style={{ margin: 0, fontSize: '0.8rem', color: '#6b7280' }}>
-                {session.user.email}
-              </p>
-            </div>
-          </div>
-
-          <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
-            <FYSelector />
-
-            <button onClick={() => router.push('/tax')}
-              style={{ padding: '8px 12px', background: 'transparent', border: '1px solid #333', borderRadius: '8px', color: '#9ca3af', cursor: 'pointer', fontSize: '0.82rem', fontWeight: 600 }}>
-              📊 Tax
-            </button>
-
-            <button onClick={() => router.push('/profile')}
-              style={{ padding: '8px 12px', background: 'transparent', border: '1px solid #333', borderRadius: '8px', color: '#9ca3af', cursor: 'pointer', fontSize: '0.82rem', fontWeight: 600 }}>
-              👤 Profile
-            </button>
-
-            <button onClick={() => router.push('/settings')}
-              style={{ padding: '8px 12px', background: 'transparent', border: '1px solid #333', borderRadius: '8px', color: '#9ca3af', cursor: 'pointer', fontSize: '0.82rem', fontWeight: 600 }}>
-              ⚙️ Rates
-            </button>
-
-            <button
-              onClick={async () => { await supabase.auth.signOut(); window.location.assign('/login') }}
-              style={{ padding: '8px 16px', background: '#dc2626', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '0.82rem', fontWeight: 600 }}>
-              Logout
-            </button>
-          </div>
-        </div>
-
-        {/* ── Success Banner ── */}
-        {successMessage && (
+          {/* ── Header ── */}
           <div style={{
-            marginBottom: '20px',
-            background: 'rgba(34,197,94,0.1)',
-            border: '1px solid rgba(34,197,94,0.3)',
-            color: '#4ade80', borderRadius: '10px',
-            padding: '12px 16px', fontSize: '0.875rem', fontWeight: 500,
-          }}>
-            ✓ {successMessage}
-          </div>
-        )}
-
-        {/* ── Claims Section ── */}
-        <div style={{
-          background: '#1a1a1a', border: '1px solid #2a2a2a',
-          borderRadius: '16px', padding: '24px',
-        }}>
-          {/* Section header */}
-          <div style={{
-            display: 'flex', alignItems: 'flex-start',
-            justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap',
-          }}>
-            <div>
-              <h2 style={{ margin: '0 0 4px 0', fontSize: '1rem', fontWeight: 700, color: '#f9fafb' }}>
-                My Claims
-              </h2>
-              <p style={{ margin: 0, fontSize: '0.8rem', color: '#6b7280' }}>
-                {activeFY ? activeFY.label : 'All years'} · Recalls · Retain · Standby · Spoilt meals
-              </p>
-            </div>
-
-            <button
-              onClick={() => setShowNewClaimModal(true)}
-              style={{
-                display: 'flex', alignItems: 'center', gap: '6px',
-                padding: '8px 16px', background: '#dc2626', border: 'none',
-                borderRadius: '8px', color: 'white', fontSize: '0.85rem',
-                fontWeight: 600, cursor: 'pointer', flexShrink: 0,
-              }}
-            >
-              <span style={{ fontSize: '1.1rem', lineHeight: 1 }}>+</span>
-              New Claim
-            </button>
-          </div>
-
-          {/* ── Tabs + Filters ── */}
-          <div style={{
-            marginTop: '20px',
             display: 'flex', alignItems: 'center',
-            justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px',
+            justifyContent: 'space-between',
+            marginBottom: '32px', flexWrap: 'wrap', gap: '12px',
           }}>
-            {/* Status tabs */}
-            <div style={{
-              display: 'flex', gap: '4px',
-              background: '#111', borderRadius: '10px', padding: '4px',
-              overflowX: 'auto',
-            }}>
-              {[
-                { key: 'all',     label: 'All' },
-                { key: 'pending', label: 'Pending' },
-                { key: 'paid',    label: 'Paid' },
-                { key: 'payslip', label: '📋 Payslip' },
-              ].map(({ key, label }) => (
-                <button key={key} onClick={() => setActiveTab(key)}
-                  style={tabStyle(activeTab === key)}>
-                  {label}
-                </button>
-              ))}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <div style={{
+                width: '40px', height: '40px', background: '#dc2626',
+                borderRadius: '10px', display: 'flex', alignItems: 'center',
+                justifyContent: 'center', flexShrink: 0,
+              }}>
+                <svg width="22" height="22" fill="none" stroke="white" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                    d="M17.657 18.657A8 8 0 016.343 7.343S7 9 9 10c0-2 .5-5 2.986-7C14 5 16.09 5.777 17.656 7.343A7.975 7.975 0 0120 13a7.975 7.975 0 01-2.343 5.657z" />
+                </svg>
+              </div>
+              <div>
+                <h1 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 700, color: '#f9fafb' }}>
+                  Fire Allowance Tracker
+                </h1>
+                <p style={{ margin: 0, fontSize: '0.8rem', color: '#6b7280' }}>
+                  {session.user.email}
+                </p>
+              </div>
             </div>
 
-            {/* Sort + Type filter — hidden on Payslip tab */}
-            {activeTab !== 'payslip' && (
-              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                <select value={filterType} onChange={(e) => setFilterType(e.target.value)}
-                  style={selectStyle}>
-                  <option value="all">All types</option>
-                  {CLAIM_TABLES.map((t) => (
-                    <option key={t} value={t}>{CLAIM_TYPE_LABELS[t]}</option>
-                  ))}
-                </select>
-
-                <select value={sortBy} onChange={(e) => setSortBy(e.target.value)}
-                  style={selectStyle}>
-                  <option value="date-desc">Newest first</option>
-                  <option value="date-asc">Oldest first</option>
-                  <option value="type">Sort by type</option>
-                </select>
-              </div>
-            )}
+            {/* FY selector + Logout — Tax/Profile/Settings now in bottom nav */}
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+              <FYSelector />
+              <button
+                onClick={async () => { await supabase.auth.signOut(); window.location.assign('/login') }}
+                style={{
+                  padding: '8px 16px', background: '#dc2626', color: 'white',
+                  border: 'none', borderRadius: '8px', cursor: 'pointer',
+                  fontSize: '0.82rem', fontWeight: 600,
+                }}>
+                Logout
+              </button>
+            </div>
           </div>
 
-          {/* ── Claim Content ── */}
-          {activeTab === 'payslip' ? (
-            <GroupedClaimList
-              session={session}
-              activeFY={activeFY}
-            />
-          ) : (
-            <ClaimList
-              activeTab={activeTab}
-              filterType={filterType}
-              sortBy={sortBy}
-              onEdit={setEditingClaim}
-            />
+          {/* ── Success Banner ── */}
+          {successMessage && (
+            <div style={{
+              marginBottom: '20px',
+              background: 'rgba(34,197,94,0.1)',
+              border: '1px solid rgba(34,197,94,0.3)',
+              color: '#4ade80', borderRadius: '10px',
+              padding: '12px 16px', fontSize: '0.875rem', fontWeight: 500,
+            }}>
+              ✓ {successMessage}
+            </div>
           )}
-        </div>
-      </div>
 
-      {/* ── New Claim Modal ── */}
-      {showNewClaimModal && (
-        <NewClaimModal
-          session={session}
-          activeFY={activeFY}
-          onClose={() => setShowNewClaimModal(false)}
-          onSuccess={handleClaimSuccess}
-        />
-      )}
+          {/* ── Reconciliation Summary (Phase 4) ── */}
+          <ReconciliationSummary />
 
-      {/* ── Edit Claim Modal ── */}
-      {editingClaim && (
-        <EditClaimModal
-          claim={editingClaim}
-          session={session}
-          activeFY={activeFY}
-          onClose={() => setEditingClaim(null)}
-          onSuccess={handleEditSuccess}
-        />
-      )}
-    </div>
-  )
-}
+          {/* ── Recent Activity Section ── */}
+          <RecentActivitySection onEdit={setEditingClaim} />
+
+          {/* ── Claims Section ── */}
+          <div style={{
+            background: '#1a1a1a', border: '1px solid #2a2a2a',
+            borderRadius: '16px', padding: '24px',
+          }}>
+            {/* Section header */}
+            <div style={{
+              display: 'flex', alignItems: 'flex-start',
+              justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap',
+            }}>
+              <div>
+                <h2 style={{ margin: '0 0 4px 0', fontSize: '1rem', fontWeight: 700, color: '#f9fafb' }}>
+                  My Claims
+                </h2>
+                <p style={{ margin: 0, fontSize: '0.8rem', color: '#6b7280' }}>
+                  {activeFY ? activeFY.label : 'All years'} · Recalls · Retain · Standby · Spoilt · Delayed meals
+                </p>
+              </div>
+
+              <button
+                onClick={() => setShowNewClaimModal(true)}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: '6px',
+                  padding: '8px 16px', background: '#dc2626', border: 'none',
+                  borderRadius: '8px', color: 'white', fontSize: '0.85rem',
+                  fontWeight: 600, cursor: 'pointer', flexShrink: 0,
+                }}
+              >
+                <span style={{ fontSize: '1.1rem', lineHeight: 1 }}>+</span>
+                New Claim
+              </button>
+            </div>
+
+            {/* ── Tabs + Filters ── */}
+            <div style={{
+              marginTop: '20px',
+              display: 'flex', alignItems: 'center',
+              justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px',
+            }}>
+              {/* Status tabs */}
+              <div style={{
+                display: 'flex', gap: '4px',
+                background: '#111', borderRadius: '10px', padding: '4px',
+                overflowX: 'auto',
+              }}>
+                {[
+                  { key: 'all',        label: 'All' },
+                  { key: 'pending',    label: 'Pending' },
+                  { key: 'paid',       label: 'Paid' },
+                  { key: 'payslip',    label: '📋 Payslip' },
+                  { key: 'petty-cash', label: '💵 Petty Cash' },
+                ].map(({ key, label }) => (
+                  <button key={key} onClick={() => setActiveTab(key)}
+                    style={tabStyle(activeTab === key)}>
+                    {label}
+                  </button>
+                ))}
+              </div>
+
+              {/* Sort + Type filter + Advanced filters toggle */}
+              {activeTab !== 'payslip' && activeTab !== 'petty-cash' && (
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+                  <select value={filterType} onChange={(e) => setFilterType(e.target.value)}
+                    style={selectStyle}>
+                    <option value="all">All types</option>
+                    {CLAIM_TYPE_ORDER.map((t) => (
+                      <option key={t} value={t}>{CLAIM_TYPE_LABELS[t]}</option>
+                    ))}
+                  </select>
+
+                  <select value={sortBy} onChange={(e) => setSortBy(e.target.value)}
+                    style={selectStyle}>
+                    <option value="date-desc">Newest first</option>
+                    <option value="date-asc">Oldest first</option>
+                    <option value="type">Sort by type</option>
+                  </select>
+
+                  <button
+                    onClick={() => setShowAdvancedFilters((v) => !v)}
+                    style={{
+                      ...selectStyle,
+                      background: showAdvancedFilters ? 'rgba(220,38,38,0.1)' : '#111',
+                      border: showAdvancedFilters ? '1px solid rgba(220,38,38,0.3)' : '1px solid #2a2a2a',
+                      color: showAdvancedFilters ? '#fca5a5' : '#6b7280',
+                      cursor: 'pointer',
+            

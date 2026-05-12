@@ -14,7 +14,7 @@
 import { useState, useEffect } from 'react'
 import { useClaims } from '@/lib/claims/ClaimsContext'
 import { useRates } from '@/lib/calculations/RatesContext'
-import { CLAIM_TABLES, CLAIM_TYPE_LABELS } from '@/lib/claims/claimTypes'
+import { CLAIM_TYPE_ORDER, CLAIM_TYPE_LABELS } from '@/lib/claims/claimTypes'
 import {
   calcRecallClaim,
   calcRetainClaim,
@@ -357,9 +357,12 @@ function StandbyInputs({ values, onChange, nightMealEligible }) {
   )
 }
 
-// ─── Sub-form: Spoilt / Delayed Meal ─────────────────────────────────────────
+// ─── Sub-form: Spoilt Meal / Delayed Meal ────────────────────────────────────
+// claimType prop: 'spoilt' or 'delayed_meal'.
+// When 'delayed_meal', the Meal Type selector is hidden — meal_type is forced to
+// 'Delayed' by the virtual claimType resolution in ClaimsContext/addClaim.
 
-function SpoiltInputs({ values, onChange }) {
+function SpoiltInputs({ values, onChange, claimType }) {
   const mealWin = getMealWindow(values.shift)
   const incidentStatus = values.incidentTime
     ? checkTimeInMealWindow(values.incidentTime, values.shift)
@@ -373,15 +376,18 @@ function SpoiltInputs({ values, onChange }) {
 
   return (
     <>
+      {/* Only show Meal Type selector for 'spoilt' — for 'delayed_meal' it is forced */}
+      {claimType !== 'delayed_meal' && (
       <div style={FIELD}>
         <label style={LABEL_STYLE}>Meal Type</label>
         <select value={values.mealType}
           onChange={(e) => onChange('mealType', e.target.value)}
           style={{ ...INPUT_STYLE, cursor: 'pointer' }}>
-          <option value="Spoilt">Spoilt - fire call interrupts meal</option>
-          <option value="Delayed">Delayed - held past meal break</option>
+          <option value="Spoilt">Spoilt Meal - fire call interrupts meal</option>
+          <option value="Delayed">Delayed Meal - held past meal break</option>
         </select>
       </div>
+      )}
 
       <div style={FIELD}>
         <label style={LABEL_STYLE}>Shift</label>
@@ -436,10 +442,11 @@ function SpoiltInputs({ values, onChange }) {
 // ─── Default values per type ──────────────────────────────────────────────────
 
 const DEFAULTS = {
-  recalls: { rosteredStn: '', recallStn: '', distHomeKm: '', distStnKm: '', mealEntitlement: 'none', incidentNumber: '', payslipPayNbr: '' },
-  retain:  { retainAmount: '', overnightCash: '', payslipPayNbr: '' },
-  standby: { standbyType: 'Standby', distKm: '', shift: 'Day', arrivedTime: '', payslipPayNbr: '' },
-  spoilt:  { mealType: 'Spoilt', shift: 'Day', incidentTime: '', mealInterrupted: '', returnToStn: '' },
+  recalls:      { rosteredStn: '', recallStn: '', distHomeKm: '', distStnKm: '', mealEntitlement: 'none', incidentNumber: '', payslipPayNbr: '' },
+  retain:       { retainAmount: '', overnightCash: '', payslipPayNbr: '' },
+  standby:      { standbyType: 'Standby', distKm: '', shift: 'Day', arrivedTime: '', payslipPayNbr: '' },
+  spoilt:       { mealType: 'Spoilt',   shift: 'Day', incidentTime: '', mealInterrupted: '', returnToStn: '' },
+  delayed_meal: { mealType: 'Delayed',  shift: 'Day', incidentTime: '', mealInterrupted: '', returnToStn: '' },
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -531,6 +538,8 @@ export default function ClaimForm({ userId, financialYearId, onSuccess, onCancel
         result = calcStandbyClaim({ distKm: num(fields.distKm), hasNightMeal }, rates)
       } else if (claimType === 'spoilt') {
         result = calcSpoiltClaim({ mealType: fields.mealType }, rates)
+      } else if (claimType === 'delayed_meal') {
+        result = calcSpoiltClaim({ mealType: 'Delayed' }, rates)
       }
     } catch (err) { result = null }
     setBreakdown(result)
@@ -555,6 +564,12 @@ export default function ClaimForm({ userId, financialYearId, onSuccess, onCancel
     } else if (claimType === 'spoilt') {
       lines = buildSpoiltCalcLines({
         mealType: fields.mealType, shift: fields.shift,
+        incidentTime: fields.incidentTime, mealInterrupted: fields.mealInterrupted,
+        returnToStn: fields.returnToStn,
+      }, rates)
+    } else if (claimType === 'delayed_meal') {
+      lines = buildSpoiltCalcLines({
+        mealType: 'Delayed', shift: fields.shift,
         incidentTime: fields.incidentTime, mealInterrupted: fields.mealInterrupted,
         returnToStn: fields.returnToStn,
       }, rates)
@@ -593,6 +608,11 @@ export default function ClaimForm({ userId, financialYearId, onSuccess, onCancel
     } else if (claimType === 'spoilt') {
       calcLines = buildSpoiltCalcLines(
         { mealType: fields.mealType, shift: fields.shift, incidentTime: fields.incidentTime, mealInterrupted: fields.mealInterrupted, returnToStn: fields.returnToStn },
+        rates
+      )
+    } else if (claimType === 'delayed_meal') {
+      calcLines = buildSpoiltCalcLines(
+        { mealType: 'Delayed', shift: fields.shift, incidentTime: fields.incidentTime, mealInterrupted: fields.mealInterrupted, returnToStn: fields.returnToStn },
         rates
       )
     }
@@ -642,7 +662,7 @@ export default function ClaimForm({ userId, financialYearId, onSuccess, onCancel
         <label style={LABEL_STYLE}>Type</label>
         <select value={claimType} onChange={(e) => setClaimType(e.target.value)}
           style={{ ...INPUT_STYLE, cursor: 'pointer' }}>
-          {CLAIM_TABLES.map((t) => (
+          {CLAIM_TYPE_ORDER.map((t) => (
             <option key={t} value={t}>{CLAIM_TYPE_LABELS[t]}</option>
           ))}
         </select>
@@ -654,10 +674,12 @@ export default function ClaimForm({ userId, financialYearId, onSuccess, onCancel
           style={{ ...INPUT_STYLE, colorScheme: 'dark' }} />
       </div>
 
-      {claimType === 'recalls' && <RecallInputs values={fields} onChange={handleFieldChange} profile={profile} />}
-      {claimType === 'retain'  && <RetainInputs  values={fields} onChange={handleFieldChange} />}
-      {claimType === 'standby' && <StandbyInputs values={fields} onChange={handleFieldChange} nightMealEligible={nightMealEligible} />}
-      {claimType === 'spoilt'  && <SpoiltInputs  values={fields} onChange={handleFieldChange} />}
+      {claimType === 'recalls'      && <RecallInputs values={fields} onChange={handleFieldChange} profile={profile} />}
+      {claimType === 'retain'       && <RetainInputs  values={fields} onChange={handleFieldChange} />}
+      {claimType === 'standby'      && <StandbyInputs values={fields} onChange={handleFieldChange} nightMealEligible={nightMealEligible} />}
+      {(claimType === 'spoilt' || claimType === 'delayed_meal') && (
+        <SpoiltInputs values={fields} onChange={handleFieldChange} claimType={claimType} />
+      )}
 
       {showCalcLines && (
         <ShowCalcPanel lines={showCalcLines} onClose={() => setShowCalcLines(null)} />

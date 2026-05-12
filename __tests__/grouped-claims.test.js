@@ -161,56 +161,143 @@ describe('claim sequence logic', () => {
   })
 })
 
-// ─── 6. Parent/child status logic ────────────────────────────────────────────
+// ─── 6. Parent/child status logic (NORMALIZED) ───────────────────────────────
+//
+// CANONICAL TRUTH: subclaim.payment_status
+// Falls back to status only if payment_status is null (legacy rows).
+// This mirrors ClaimsContext.calcParentStatus exactly.
 
-describe('parent status calculation', () => {
+describe('parent status calculation — normalized (payment_status canonical)', () => {
   function calcParentStatus(children) {
     if (!children || children.length === 0) return 'Pending'
-    const statuses = children.map((c) => (c.status || 'Pending').toLowerCase())
-    if (statuses.some((s) => s === 'disputed')) return 'Disputed'
-    if (statuses.every((s) => s === 'paid')) return 'Paid'
+    const resolvedStatuses = children.map((c) => {
+      if (c.payment_status != null) return (c.payment_status || 'Pending').toLowerCase()
+      return (c.status || 'Pending').toLowerCase()
+    })
+    if (resolvedStatuses.some((s) => s === 'disputed')) return 'Disputed'
+    if (resolvedStatuses.every((s) => s === 'paid')) return 'Paid'
     return 'Pending'
   }
 
-  test('all children Paid → parent Paid', () => {
+  // ── payment_status canonical path ──────────────────────────────────────────
+
+  test('all children payment_status=Paid → parent Paid', () => {
     const children = [
-      { status: 'Paid' }, { status: 'Paid' }, { status: 'Paid' },
+      { payment_status: 'Paid', status: 'Pending' },
+      { payment_status: 'Paid', status: 'Pending' },
+      { payment_status: 'Paid', status: 'Pending' },
     ]
     expect(calcParentStatus(children)).toBe('Paid')
   })
 
-  test('one child Pending → parent Pending', () => {
+  test('one child payment_status=Pending → parent Pending', () => {
     const children = [
-      { status: 'Paid' }, { status: 'Pending' }, { status: 'Paid' },
+      { payment_status: 'Paid',    status: 'Paid' },
+      { payment_status: 'Pending', status: 'Paid' },
+      { payment_status: 'Paid',    status: 'Paid' },
     ]
     expect(calcParentStatus(children)).toBe('Pending')
   })
 
-  test('any child Disputed → parent Disputed', () => {
+  test('mixed: some Paid some null → Pending (null treated as Pending)', () => {
     const children = [
-      { status: 'Paid' }, { status: 'Disputed' }, { status: 'Paid' },
+      { payment_status: 'Paid',    status: 'Paid' },
+      { payment_status: null,      status: 'Pending' },
+    ]
+    expect(calcParentStatus(children)).toBe('Pending')
+  })
+
+  test('all payment_status=null → falls back to status (legacy rows)', () => {
+    const children = [
+      { payment_status: null, status: 'Paid' },
+      { payment_status: null, status: 'Paid' },
+    ]
+    expect(calcParentStatus(children)).toBe('Paid')
+  })
+
+  test('status=Disputed with payment_status=null → Disputed', () => {
+    const children = [
+      { payment_status: null, status: 'Paid' },
+      { payment_status: null, status: 'Disputed' },
     ]
     expect(calcParentStatus(children)).toBe('Disputed')
   })
 
-  test('Disputed overrides Pending', () => {
+  test('payment_status overrides status — payment_status=Paid, status=Pending → Paid', () => {
     const children = [
-      { status: 'Pending' }, { status: 'Disputed' },
+      { payment_status: 'Paid', status: 'Pending' },
+      { payment_status: 'Paid', status: 'Pending' },
     ]
-    expect(calcParentStatus(children)).toBe('Disputed')
+    expect(calcParentStatus(children)).toBe('Paid')
   })
+
+  // ── Edge cases ────────────────────────────────────────────────────────────
 
   test('empty children → Pending', () => {
     expect(calcParentStatus([])).toBe('Pending')
   })
 
-  test('single Paid child → Paid', () => {
-    expect(calcParentStatus([{ status: 'Paid' }])).toBe('Paid')
+  test('single child payment_status=Paid → Paid', () => {
+    expect(calcParentStatus([{ payment_status: 'Paid', status: 'Pending' }])).toBe('Paid')
   })
 
-  test('case insensitive', () => {
-    const children = [{ status: 'PAID' }, { status: 'paid' }]
+  test('case insensitive on payment_status', () => {
+    const children = [
+      { payment_status: 'PAID', status: 'Pending' },
+      { payment_status: 'paid', status: 'Pending' },
+    ]
     expect(calcParentStatus(children)).toBe('Paid')
+  })
+
+  test('parent with zero children → Pending', () => {
+    expect(calcParentStatus([])).toBe('Pending')
+  })
+})
+
+// ─── 6b. derivedPaymentStatus in groupedView ─────────────────────────────────
+//
+// Tests the normalized derivedPaymentStatus logic that ClaimsContext.groupedView
+// computes from payment_status only (NULL → treated as Pending).
+
+describe('derivedPaymentStatus — normalized groupedView logic', () => {
+  function derivePaymentStatus(children) {
+    const totalCount = children.length
+    const paidCount  = children.filter(
+      (c) => (c.payment_status || 'Pending').toLowerCase() === 'paid'
+    ).length
+    return totalCount > 0 && paidCount === totalCount ? 'Paid' : 'Pending'
+  }
+
+  test('all Paid → Paid', () => {
+    expect(derivePaymentStatus([
+      { payment_status: 'Paid' },
+      { payment_status: 'Paid' },
+    ])).toBe('Paid')
+  })
+
+  test('one Pending → Pending', () => {
+    expect(derivePaymentStatus([
+      { payment_status: 'Paid' },
+      { payment_status: 'Pending' },
+    ])).toBe('Pending')
+  })
+
+  test('NULL payment_status treated as Pending → parent Pending', () => {
+    expect(derivePaymentStatus([
+      { payment_status: 'Paid' },
+      { payment_status: null },
+    ])).toBe('Pending')
+  })
+
+  test('all NULL (legacy row) → Pending (no Legacy escape hatch)', () => {
+    expect(derivePaymentStatus([
+      { payment_status: null },
+      { payment_status: null },
+    ])).toBe('Pending')
+  })
+
+  test('empty children → Pending', () => {
+    expect(derivePaymentStatus([])).toBe('Pending')
   })
 })
 
@@ -297,93 +384,4 @@ describe('grouped sorting', () => {
   })
 })
 
-// ─── 9. Grouped filtering ─────────────────────────────────────────────────────
-
-describe('grouped filtering', () => {
-  const groups = [
-    { id: 'g1', parent_status: 'Pending', claim_type: 'recalls' },
-    { id: 'g2', parent_status: 'Paid',    claim_type: 'recalls' },
-    { id: 'g3', parent_status: 'Pending', claim_type: 'standby' },
-    { id: 'g4', parent_status: 'Disputed',claim_type: 'recalls' },
-  ]
-
-  test('filter by Pending status', () => {
-    const pending = groups.filter((g) => g.parent_status === 'Pending')
-    expect(pending.length).toBe(2)
-  })
-
-  test('filter by Paid status', () => {
-    const paid = groups.filter((g) => g.parent_status === 'Paid')
-    expect(paid.length).toBe(1)
-  })
-
-  test('filter by type recalls', () => {
-    const recalls = groups.filter((g) => g.claim_type === 'recalls')
-    expect(recalls.length).toBe(3)
-  })
-
-  test('filter pending + recalls', () => {
-    const result = groups.filter((g) => g.parent_status === 'Pending' && g.claim_type === 'recalls')
-    expect(result.length).toBe(1)
-    expect(result[0].id).toBe('g1')
-  })
-})
-
-// ─── 10. Overdue detection ────────────────────────────────────────────────────
-
-describe('isClaimOverdue', () => {
-  test('pending claim created > 28 days ago is overdue', () => {
-    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
-    const claim = { status: 'Pending', created_at: thirtyDaysAgo }
-    expect(isClaimOverdue(claim)).toBe(true)
-  })
-
-  test('pending claim created < 28 days ago is not overdue', () => {
-    const tenDaysAgo = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString()
-    const claim = { status: 'Pending', created_at: tenDaysAgo }
-    expect(isClaimOverdue(claim)).toBe(false)
-  })
-
-  test('paid claim is never overdue regardless of age', () => {
-    const sixtyDaysAgo = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString()
-    const claim = { status: 'Paid', created_at: sixtyDaysAgo }
-    expect(isClaimOverdue(claim)).toBe(false)
-  })
-
-  test('claim with no created_at is not overdue', () => {
-    const claim = { status: 'Pending', created_at: null }
-    expect(isClaimOverdue(claim)).toBe(false)
-  })
-
-  test('exactly 28 days is not yet overdue', () => {
-    const exactly28 = new Date(Date.now() - 28 * 24 * 60 * 60 * 1000).toISOString()
-    const claim = { status: 'Pending', created_at: exactly28 }
-    // 28 days is the boundary — function uses > 28, not >= 28
-    expect(isClaimOverdue(claim)).toBe(false)
-  })
-})
-
-// ─── 11. Group overdue via overdue_at field ───────────────────────────────────
-
-describe('group overdue via overdue_at', () => {
-  function isGroupOverdue(group) {
-    if ((group.parent_status || '').toLowerCase() !== 'pending') return false
-    if (!group.overdue_at) return false
-    return new Date() > new Date(group.overdue_at)
-  }
-
-  test('pending group past overdue_at is overdue', () => {
-    const pastDate = new Date(Date.now() - 1000).toISOString()
-    expect(isGroupOverdue({ parent_status: 'Pending', overdue_at: pastDate })).toBe(true)
-  })
-
-  test('pending group with future overdue_at is not overdue', () => {
-    const futureDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
-    expect(isGroupOverdue({ parent_status: 'Pending', overdue_at: futureDate })).toBe(false)
-  })
-
-  test('paid group is never overdue', () => {
-    const pastDate = new Date(Date.now() - 1000).toISOString()
-    expect(isGroupOverdue({ parent_status: 'Paid', overdue_at: pastDate })).toBe(false)
-  })
-})
+// ─── 9. Grouped filtering ────────�

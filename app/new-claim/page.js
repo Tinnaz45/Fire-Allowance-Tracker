@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabaseClient'
 import ClaimForm from '@/components/claims/ClaimForm'
+import AppShell from '@/components/nav/AppShell'
 
 export default function NewClaimPage() {
   const router = useRouter()
@@ -35,80 +36,75 @@ export default function NewClaimPage() {
 
   if (submitted) {
     return (
-      <div style={{
-        minHeight: '100vh', background: '#0f0f0f',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        color: '#4ade80', fontSize: '0.95rem', flexDirection: 'column', gap: '16px',
-      }}>
+      <AppShell>
         <div style={{
-          background: 'rgba(34,197,94,0.1)',
-          border: '1px solid rgba(34,197,94,0.3)',
-          borderRadius: '12px',
-          padding: '16px 24px',
-          textAlign: 'center',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          minHeight: '60vh', flexDirection: 'column', gap: '16px',
+          padding: '32px 20px',
         }}>
-          ✓ Claim submitted successfully!
+          <div style={{
+            background: 'rgba(34,197,94,0.1)',
+            border: '1px solid rgba(34,197,94,0.3)',
+            borderRadius: '12px',
+            padding: '16px 24px',
+            textAlign: 'center',
+            color: '#4ade80',
+            fontSize: '0.95rem',
+          }}>
+            ✓ Claim submitted successfully!
+          </div>
+          <button
+            onClick={() => router.push('/')}
+            style={{
+              padding: '10px 20px',
+              background: '#dc2626',
+              border: 'none',
+              borderRadius: '8px',
+              color: 'white',
+              fontSize: '0.9rem',
+              fontWeight: 600,
+              cursor: 'pointer',
+            }}
+          >
+            Back to Dashboard
+          </button>
         </div>
-        <button
-          onClick={() => router.push('/')}
-          style={{
-            padding: '10px 20px',
-            background: '#dc2626',
-            border: 'none',
-            borderRadius: '8px',
-            color: 'white',
-            fontSize: '0.9rem',
-            fontWeight: 600,
-            cursor: 'pointer',
-          }}
-        >
-          Back to Dashboard
-        </button>
-      </div>
+      </AppShell>
     )
   }
 
   return (
-    <div style={{
-      minHeight: '100vh',
-      background: '#0f0f0f',
-      color: '#e5e7eb',
-      padding: '32px 20px',
-      fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-    }}>
-      <div style={{ maxWidth: '480px', margin: '0 auto' }}>
+    <AppShell>
+      <div style={{
+        color: '#e5e7eb',
+        padding: '32px 20px',
+        boxSizing: 'border-box',
+      }}>
+        <div style={{ maxWidth: '480px', margin: '0 auto' }}>
 
-        {/* Back link */}
-        <button
-          onClick={() => router.push('/')}
-          style={{
-            display: 'flex', alignItems: 'center', gap: '6px',
-            background: 'none', border: 'none',
-            color: '#9ca3af', cursor: 'pointer',
-            fontSize: '0.85rem', fontWeight: 500,
-            marginBottom: '24px', padding: 0,
-          }}
-        >
-          ← Back to Dashboard
-        </button>
+          <div style={{ marginBottom: '24px' }}>
+            <h1 style={{ margin: '0 0 4px', fontSize: '1.35rem', fontWeight: 700, color: '#f9fafb' }}>
+              New Claim
+            </h1>
+            <p style={{ margin: 0, fontSize: '0.82rem', color: '#6b7280' }}>
+              {session.user.email}
+            </p>
+          </div>
 
-        <div style={{
-          background: '#1a1a1a',
-          border: '1px solid #2a2a2a',
-          borderRadius: '16px',
-          padding: '28px 24px',
-        }}>
-          <h1 style={{ margin: '0 0 24px 0', fontSize: '1.1rem', fontWeight: 700, color: '#f9fafb' }}>
-            New Claim
-          </h1>
-
-          <ClaimForm
-            userId={session.user.id}
-            onSuccess={() => setSubmitted(true)}
-            onCancel={() => router.push('/')}
-          />
+          <div style={{
+            background: '#1a1a1a',
+            border: '1px solid #2a2a2a',
+            borderRadius: '16px',
+            padding: '28px 24px',
+          }}>
+            <ClaimForm
+              userId={session.user.id}
+              onSuccess={() => setSubmitted(true)}
+              onCancel={() => router.push('/')}
+            />
+          </div>
         </div>
       </div>
-    </div>
+    </AppShell>
   )
 }
