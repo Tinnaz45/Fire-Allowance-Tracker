@@ -1,7 +1,7 @@
 'use client'
 
 // ─── ExpandableClaimList ───────────────────────────────────────────────────────
-// Phase 3 — Expandable multi-component payment UI for All / Pending / Paid tabs.
+// Phase 4 — Expandable multi-component payment UI with normalized filtering.
 //
 // ARCHITECTURE:
 //   - Grouped claims (from fat_claim_groups) render as expandable parent rows.
@@ -15,6 +15,11 @@
 //   - Mobile-first: single-column stacked layout, no horizontal overflow.
 //   - Preserves all existing edit workflows.
 //   - No duplicate rendering. No hydration warnings. No console errors.
+//
+// PHASE 4 ADDITIONS:
+//   - paymentMethodFilter prop: 'Payslip' | 'Petty Cash' | undefined (= all)
+//   - paymentDateFrom/paymentDateTo props: 'YYYY-MM-DD' | undefined
+//   - All filters use centralized filterUtils pipeline (canonical truth: payment_status)
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { useState } from 'react'
@@ -26,6 +31,12 @@ import {
   isClaimOverdue,
   formatDateDDMMYY,
 } from '@/lib/calculations/engine'
+import {
+  groupPassesFilters,
+  ungroupedPassesFilters,
+  sortGroupedEntries,
+  sortUngroupedClaims,
+} from '@/lib/reconciliation/filterUtils'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -577,20 +588,26 @@ function FlatClaimCard({ claim, onEdit }) {
 }
 
 // ─── ExpandableClaimList ───────────────────────────────────────────────────────
-// Main export. Replaces ClaimList on All / Pending / Paid tabs.
+// Main export. Renders All / Pending / Paid / Payslip / Petty Cash tabs.
 //
 // Props:
-//   activeTab   — 'all' | 'pending' | 'paid'
-//   filterType  — 'all' | claim type string
-//   sortBy      — 'date-desc' | 'date-asc' | 'type'
-//   onEdit      — callback(claim) to open EditClaimModal
-//   session     — Supabase session (for QuickPayToggle)
-//   activeFY    — active financial year object (for QuickPayToggle)
+//   activeTab           — 'all' | 'pending' | 'paid'
+//   filterType          — 'all' | claim type string
+//   sortBy              — 'date-desc' | 'date-asc' | 'type'
+//   paymentMethodFilter — 'Payslip' | 'Petty Cash' | undefined (all)
+//   paymentDateFrom     — 'YYYY-MM-DD' | undefined
+//   paymentDateTo       — 'YYYY-MM-DD' | undefined
+//   onEdit              — callback(claim) to open EditClaimModal
+//   session             — Supabase session (for QuickPayToggle)
+//   activeFY            — active financial year object (for QuickPayToggle)
 
 export default function ExpandableClaimList({
   activeTab = 'all',
   filterType = 'all',
   sortBy = 'date-desc',
+  paymentMethodFilter,
+  paymentDateFrom,
+  paymentDateTo,
   onEdit,
   session,
   activeFY,
@@ -635,64 +652,34 @@ export default function ExpandableClaimList({
 
   const { grouped, ungrouped } = groupedView || { grouped: [], ungrouped: [] }
 
-  // ── Tab filter ────────────────────────────────────────────────────────────
-  // NORMALIZED: grouped entries filtered by derivedPaymentStatus (canonical).
-  // Ungrouped (legacy) entries filtered by claim.status (only truth available).
+  // ── Build normalized filter spec (Phase 4) ─────────────────────────────────
+  // Maps activeTab → paymentStatus filter consumed by filterUtils pipeline.
+  // CANONICAL: uses derivedPaymentStatus for grouped, claim.status for ungrouped.
 
-  const matchesTabGrouped = (derivedStatus) => {
-    const s = (derivedStatus || '').toLowerCase()
-    if (activeTab === 'pending') return s === 'pending' || s === 'disputed'
-    if (activeTab === 'paid')    return s === 'paid'
-    return true // 'all'
+  const paymentStatusFilter = activeTab === 'pending' ? 'pending'
+                            : activeTab === 'paid'    ? 'paid'
+                            : 'all'
+
+  const filters = {
+    paymentStatus:   paymentStatusFilter,
+    paymentMethod:   paymentMethodFilter || 'all',
+    claimType:       filterType || 'all',
+    paymentDateFrom: paymentDateFrom || null,
+    paymentDateTo:   paymentDateTo   || null,
+    claimDateFrom:   null,
+    claimDateTo:     null,
+    overdueOnly:     false,
   }
 
-  const matchesTabUngrouped = (claimStatus) => {
-    const s = (claimStatus || '').toLowerCase()
-    if (activeTab === 'pending') return s === 'pending' || s === 'disputed'
-    if (activeTab === 'paid')    return s === 'paid'
-    return true
-  }
+  // Apply centralized filter pipeline
+  const visibleGroups    = grouped.filter((g) => groupPassesFilters(g, filters))
+  const visibleUngrouped = ungrouped.filter((c) => ungroupedPassesFilters(c, filters))
 
-  const matchesType = (entry) => {
-    if (filterType === 'all') return true
-    // Match if any child has the filterType, or group claim_type matches
-    if (entry.group) {
-      return (entry.group.claim_type === filterType) ||
-        entry.children.some((c) => c.claimType === filterType)
-    }
-    return entry.claimType === filterType
-  }
+  // Sort using centralized sort helpers
+  const sortedGroups    = sortGroupedEntries(visibleGroups, sortBy)
+  const sortedUngrouped = sortUngroupedClaims(visibleUngrouped, sortBy)
 
-  // Filter grouped entries — use derivedPaymentStatus (canonical, not parent_status)
-  const visibleGroups = grouped
-    .filter((g) => matchesTabGrouped(g.derivedPaymentStatus))
-    .filter(matchesType)
-
-  // Sort grouped entries
-  const sortedGroups = [...visibleGroups].sort((a, b) => {
-    if (sortBy === 'date-asc') {
-      return new Date(a.group.incident_date || a.group.created_at) -
-             new Date(b.group.incident_date || b.group.created_at)
-    }
-    if (sortBy === 'type') {
-      return (a.group.claim_type || '').localeCompare(b.group.claim_type || '')
-    }
-    // date-desc (default)
-    return new Date(b.group.incident_date || b.group.created_at) -
-           new Date(a.group.incident_date || a.group.created_at)
-  })
-
-  // Filter ungrouped claims (legacy flat cards) — use claim.status (only source)
-  const visibleUngrouped = ungrouped
-    .filter((c) => matchesTabUngrouped(c.status))
-    .filter((c) => filterType === 'all' || c.claimType === filterType)
-    .sort((a, b) => {
-      if (sortBy === 'date-asc')  return new Date(a.date) - new Date(b.date)
-      if (sortBy === 'type')      return (a.claimType || '').localeCompare(b.claimType || '')
-      return new Date(b.date) - new Date(a.date)
-    })
-
-  const hasContent = sortedGroups.length > 0 || visibleUngrouped.length > 0
+  const hasContent = sortedGroups.length > 0 || sortedUngrouped.length > 0
 
   if (!hasContent) {
     return (
@@ -711,7 +698,7 @@ export default function ExpandableClaimList({
     new Date() > new Date(g.group.overdue_at)
   ).length
 
-  const overdueUngroupedCount = visibleUngrouped.filter(isClaimOverdue).length
+  const overdueUngroupedCount = sortedUngrouped.filter(isClaimOverdue).length
   const totalOverdue = overdueGroupCount + overdueUngroupedCount
 
   // ── Totals ────────────────────────────────────────────────────────────────
@@ -720,12 +707,12 @@ export default function ExpandableClaimList({
     (sum, g) => sum + g.children.reduce((cs, c) => cs + resolveComponentAmount(c), 0),
     0
   )
-  const ungroupedTotal = visibleUngrouped.reduce(
+  const ungroupedTotal = sortedUngrouped.reduce(
     (sum, c) => sum + resolveEffectiveAmount(c),
     0
   )
   const grandTotal = groupTotal + ungroupedTotal
-  const itemCount  = sortedGroups.length + visibleUngrouped.length
+  const itemCount  = sortedGroups.length + sortedUngrouped.length
 
   // ── Render ────────────────────────────────────────────────────────────────
 
@@ -767,7 +754,7 @@ export default function ExpandableClaimList({
       )}
 
       {/* Ungrouped flat cards */}
-      {visibleUngrouped.length > 0 && (
+      {sortedUngrouped.length > 0 && (
         <div style={{ marginTop: sortedGroups.length > 0 ? '16px' : '0' }}>
           {sortedGroups.length > 0 && (
             <div style={{
@@ -780,4 +767,25 @@ export default function ExpandableClaimList({
             }}>
               Other claims
             </div>
-     
+          )}
+          {sortedUngrouped.map((claim) => (
+            <FlatClaimCard
+              key={`${claim.claimType}-${claim.id}`}
+              claim={claim}
+              onEdit={onEdit}
+            />
+          ))}
+        </div>
+      )}
+
+      {/* Footer summary */}
+      <div style={{
+        marginTop: '16px',
+        paddingTop: '12px',
+        borderTop: '1px solid #1f1f1f',
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        fontSize: '0.78rem',
+        color: '#6b7280',
+        flexWrap: 'w

@@ -8,10 +8,11 @@ import { useRates } from '@/lib/calculations/RatesContext'
 import { useFY } from '@/lib/fy/FinancialYearContext'
 import { CLAIM_TYPE_ORDER, CLAIM_TYPE_LABELS } from '@/lib/claims/claimTypes'
 import ClaimForm from '@/components/claims/ClaimForm'
-import ClaimList from '@/components/claims/ClaimList'
+import ExpandableClaimList from '@/components/claims/ExpandableClaimList'
 import GroupedClaimList from '@/components/claims/GroupedClaimList'
 import AppShell from '@/components/nav/AppShell'
 import RecentActivitySection from '@/components/dashboard/RecentActivitySection'
+import ReconciliationSummary from '@/components/dashboard/ReconciliationSummary'
 
 // ─── Shared input styles ──────────────────────────────────────────────────────
 
@@ -352,10 +353,15 @@ export default function HomePage() {
   const [editingClaim, setEditingClaim] = useState(null)
   const [successMessage, setSuccessMessage] = useState(null)
 
-  // activeTab: 'all' | 'pending' | 'paid' | 'payslip'
+  // activeTab: 'all' | 'pending' | 'paid' | 'payslip' | 'petty-cash'
   const [activeTab, setActiveTab] = useState('all')
   const [sortBy, setSortBy] = useState('date-desc')
   const [filterType, setFilterType] = useState('all')
+  // Phase 4: additional filters
+  const [paymentMethodFilter, setPaymentMethodFilter] = useState('all') // 'all' | 'Payslip' | 'Petty Cash'
+  const [paymentDateFrom, setPaymentDateFrom] = useState('')
+  const [paymentDateTo, setPaymentDateTo] = useState('')
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false)
 
   // ── Auth ──────────────────────────────────────────────────────────────────
 
@@ -518,6 +524,9 @@ export default function HomePage() {
             </div>
           )}
 
+          {/* ── Reconciliation Summary (Phase 4) ── */}
+          <ReconciliationSummary />
+
           {/* ── Recent Activity Section ── */}
           <RecentActivitySection onEdit={setEditingClaim} />
 
@@ -567,10 +576,11 @@ export default function HomePage() {
                 overflowX: 'auto',
               }}>
                 {[
-                  { key: 'all',     label: 'All' },
-                  { key: 'pending', label: 'Pending' },
-                  { key: 'paid',    label: 'Paid' },
-                  { key: 'payslip', label: '📋 Payslip' },
+                  { key: 'all',        label: 'All' },
+                  { key: 'pending',    label: 'Pending' },
+                  { key: 'paid',       label: 'Paid' },
+                  { key: 'payslip',    label: '📋 Payslip' },
+                  { key: 'petty-cash', label: '💵 Petty Cash' },
                 ].map(({ key, label }) => (
                   <button key={key} onClick={() => setActiveTab(key)}
                     style={tabStyle(activeTab === key)}>
@@ -579,9 +589,9 @@ export default function HomePage() {
                 ))}
               </div>
 
-              {/* Sort + Type filter — hidden on Payslip tab */}
-              {activeTab !== 'payslip' && (
-                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+              {/* Sort + Type filter + Advanced filters toggle */}
+              {activeTab !== 'payslip' && activeTab !== 'petty-cash' && (
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
                   <select value={filterType} onChange={(e) => setFilterType(e.target.value)}
                     style={selectStyle}>
                     <option value="all">All types</option>
@@ -596,48 +606,13 @@ export default function HomePage() {
                     <option value="date-asc">Oldest first</option>
                     <option value="type">Sort by type</option>
                   </select>
-                </div>
-              )}
-            </div>
 
-            {/* ── Claim Content ── */}
-            {activeTab === 'payslip' ? (
-              <GroupedClaimList
-                session={session}
-                activeFY={activeFY}
-              />
-            ) : (
-              <ClaimList
-                activeTab={activeTab}
-                filterType={filterType}
-                sortBy={sortBy}
-                onEdit={setEditingClaim}
-              />
-            )}
-          </div>
-        </div>
-
-        {/* ── New Claim Modal ── */}
-        {showNewClaimModal && (
-          <NewClaimModal
-            session={session}
-            activeFY={activeFY}
-            onClose={() => setShowNewClaimModal(false)}
-            onSuccess={handleClaimSuccess}
-          />
-        )}
-
-        {/* ── Edit Claim Modal ── */}
-        {editingClaim && (
-          <EditClaimModal
-            claim={editingClaim}
-            session={session}
-            activeFY={activeFY}
-            onClose={() => setEditingClaim(null)}
-            onSuccess={handleEditSuccess}
-          />
-        )}
-      </div>
-    </AppShell>
-  )
-}
+                  <button
+                    onClick={() => setShowAdvancedFilters((v) => !v)}
+                    style={{
+                      ...selectStyle,
+                      background: showAdvancedFilters ? 'rgba(220,38,38,0.1)' : '#111',
+                      border: showAdvancedFilters ? '1px solid rgba(220,38,38,0.3)' : '1px solid #2a2a2a',
+                      color: showAdvancedFilters ? '#fca5a5' : '#6b7280',
+                      cursor: 'pointer',
+            
