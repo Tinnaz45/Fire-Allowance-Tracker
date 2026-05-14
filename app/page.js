@@ -591,7 +591,6 @@ export default function HomePage() {
 
               {/* Sort + Type filter + Advanced filters toggle */}
               {activeTab !== 'payslip' && activeTab !== 'petty-cash' && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                 <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
                   <select value={filterType} onChange={(e) => setFilterType(e.target.value)}
                     style={selectStyle}>
@@ -628,7 +627,7 @@ export default function HomePage() {
                 </div>
 
                 {/* ── Advanced Filters (Phase 4) ── */}
-                {showAdvancedFilters && (
+                {showAdvancedFilters && activeTab !== 'payslip' && activeTab !== 'petty-cash' && (
                   <div style={{
                     display: 'flex',
                     gap: '10px',
@@ -699,8 +698,7 @@ export default function HomePage() {
                     </div>
                   </div>
                 )}
-                </div>
-              )}
+              </div>
 
               {/* ── Claim content: three-way render ── */}
               {activeTab === 'payslip' ? (

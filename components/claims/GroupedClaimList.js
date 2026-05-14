@@ -37,9 +37,10 @@ function resolveComponentAmount(claim) {
 function StatusBadge({ status }) {
   const lower = (status || '').toLowerCase()
   const map = {
-    paid:     { background: 'rgba(34,197,94,0.15)',  border: '1px solid rgba(34,197,94,0.4)',  color: '#4ade80' },
-    pending:  { background: 'rgba(234,179,8,0.15)',  border: '1px solid rgba(234,179,8,0.4)',  color: '#facc15' },
-    disputed: { background: 'rgba(239,68,68,0.15)',  border: '1px solid rgba(239,68,68,0.4)',  color: '#f87171' },
+    paid:             { background: 'rgba(34,197,94,0.15)',  border: '1px solid rgba(34,197,94,0.4)',  color: '#4ade80' },
+    pending:          { background: 'rgba(234,179,8,0.15)',  border: '1px solid rgba(234,179,8,0.4)',  color: '#facc15' },
+    disputed:         { background: 'rgba(239,68,68,0.15)',  border: '1px solid rgba(239,68,68,0.4)',  color: '#f87171' },
+    'partially paid': { background: 'rgba(99,102,241,0.15)', border: '1px solid rgba(99,102,241,0.4)', color: '#a5b4fc' },
   }
   const style = map[lower] || { background: 'rgba(107,114,128,0.15)', border: '1px solid rgba(107,114,128,0.4)', color: '#9ca3af' }
   return (
@@ -69,25 +70,37 @@ function PaymentMethodBadge({ method }) {
   )
 }
 
+// QuickPayToggle — inline "Mark Paid" for unpaid subclaims.
+// Only visible for unpaid subclaims (null or 'Pending' payment_status).
+// Treats null payment_status as Pending — shows button for all new claims.
+// Rolls back and shows retry state if Supabase update fails.
+
 function QuickPayToggle({ claim, session, activeFY }) {
   const { updatePaymentStatus } = useClaims()
   const [toggling, setToggling] = useState(false)
-  if (claim.payment_status == null) return null
+  const [hasError, setHasError] = useState(false)
+
   const isPaid = (claim.payment_status || '').toLowerCase() === 'paid'
-  const handleToggle = async () => {
+
+  // Only visible for unpaid subclaims
+  if (isPaid) return null
+
+  const handleMarkPaid = async () => {
     if (toggling || !session) return
     setToggling(true)
+    setHasError(false)
     try {
-      await updatePaymentStatus({ userId: session.user.id, claim, paymentStatus: isPaid ? 'Pending' : 'Paid', financialYearId: activeFY?.id || null })
+      await updatePaymentStatus({ userId: session.user.id, claim, paymentStatus: 'Paid', financialYearId: activeFY?.id || null })
     } catch (err) {
       console.error('[QuickPayToggle]', err)
+      setHasError(true)
     } finally {
       setToggling(false)
     }
   }
   return (
-    <button onClick={handleToggle} disabled={toggling} title={isPaid ? 'Revert to Pending' : 'Mark as Paid'} style={{ padding: '3px 9px', borderRadius: '6px', border: isPaid ? '1px solid rgba(234,179,8,0.35)' : '1px solid rgba(34,197,94,0.4)', background: isPaid ? 'rgba(234,179,8,0.08)' : 'rgba(34,197,94,0.1)', color: isPaid ? '#fde68a' : '#86efac', fontSize: '0.7rem', fontWeight: 700, cursor: toggling ? 'wait' : 'pointer', opacity: toggling ? 0.6 : 1, flexShrink: 0, display: 'inline-flex', alignItems: 'center', gap: '3px', transition: 'opacity 0.15s' }}>
-      {toggling ? '…' : isPaid ? '↩ Undo' : '⚡ Pay'}
+    <button onClick={handleMarkPaid} disabled={toggling} title="Mark as Paid" style={{ padding: '3px 9px', borderRadius: '6px', border: hasError ? '1px solid rgba(239,68,68,0.5)' : '1px solid rgba(34,197,94,0.4)', background: hasError ? 'rgba(239,68,68,0.1)' : 'rgba(34,197,94,0.1)', color: hasError ? '#f87171' : '#86efac', fontSize: '0.7rem', fontWeight: 700, cursor: toggling ? 'wait' : 'pointer', opacity: toggling ? 0.6 : 1, flexShrink: 0, display: 'inline-flex', alignItems: 'center', gap: '3px', transition: 'opacity 0.15s', whiteSpace: 'nowrap' }}>
+      {toggling ? '…' : hasError ? '✕ Retry' : 'Mark Paid'}
     </button>
   )
 }
@@ -147,9 +160,10 @@ function GroupCard({ groupEntry, session, activeFY }) {
   const { group, children, derivedPaymentStatus, paidCount, totalCount } = groupEntry
   const [collapsed, setCollapsed] = useState(false)
 
-  // NORMALIZED: overdue uses derivedPaymentStatus (canonical), not parent_status
+  // NORMALIZED: pending or partially-paid groups can be overdue
   const isOverdue = (() => {
-    if ((derivedPaymentStatus || '').toLowerCase() !== 'pending') return false
+    const lower = (derivedPaymentStatus || '').toLowerCase()
+    if (lower !== 'pending' && lower !== 'partially paid') return false
     if (!group.overdue_at) return false
     return new Date() > new Date(group.overdue_at)
   })()
@@ -167,8 +181,9 @@ function GroupCard({ groupEntry, session, activeFY }) {
   // Payment badge always derived from derivedPaymentStatus (canonical truth)
   const paymentBadge = (() => {
     if (totalCount === 0) return null
-    if (derivedPaymentStatus === 'Paid') return { text: '✓ All Paid', color: '#86efac', bg: 'rgba(34,197,94,0.12)', border: 'rgba(34,197,94,0.4)' }
-    return { text: pendingCount + ' Pending', color: '#fde68a', bg: 'rgba(234,179,8,0.08)', border: 'rgba(234,179,8,0.25)' }
+    if (derivedPaymentStatus === 'Paid')           return { text: '✓ All Paid',                    color: '#86efac', bg: 'rgba(34,197,94,0.12)',    border: 'rgba(34,197,94,0.4)'    }
+    if (derivedPaymentStatus === 'Partially Paid') return { text: `${paidCount}/${totalCount} Paid`, color: '#a5b4fc', bg: 'rgba(99,102,241,0.1)',   border: 'rgba(99,102,241,0.35)'  }
+    return { text: `0/${totalCount} Paid`, color: '#fde68a', bg: 'rgba(234,179,8,0.08)', border: 'rgba(234,179,8,0.25)' }
   })()
   return (
     <div style={{ borderRadius: '12px', border: isOverdue ? '1.5px solid rgba(239,68,68,0.5)' : '1px solid #2a2a2a', background: isOverdue ? 'rgba(251,191,36,0.03)' : '#111', marginBottom: '12px', overflow: 'hidden' }}>
@@ -259,12 +274,13 @@ export default function GroupedClaimList({ session, activeFY, onEdit }) {
   const pendingGroups = grouped.filter((g) => (g.derivedPaymentStatus || '').toLowerCase() !== 'paid')
   const paidGroups    = grouped.filter((g) => (g.derivedPaymentStatus || '').toLowerCase() === 'paid')
 
-  // NORMALIZED: overdue detection uses derivedPaymentStatus
-  const overdueCount  = pendingGroups.filter((g) =>
-    (g.derivedPaymentStatus || '').toLowerCase() === 'pending' &&
-    g.group.overdue_at &&
-    new Date() > new Date(g.group.overdue_at)
-  ).length
+  // NORMALIZED: overdue detection — pending or partially-paid groups can be overdue
+  const overdueCount = pendingGroups.filter((g) => {
+    const lower = (g.derivedPaymentStatus || '').toLowerCase()
+    return (lower === 'pending' || lower === 'partially paid') &&
+      g.group.overdue_at &&
+      new Date() > new Date(g.group.overdue_at)
+  }).length
 
   const hasContent    = pendingGroups.length > 0 || ungrouped.length > 0
 
