@@ -15,6 +15,9 @@ import { useState, useEffect } from 'react'
 import { useClaims } from '@/lib/claims/ClaimsContext'
 import { useRates } from '@/lib/calculations/RatesContext'
 import { CLAIM_TYPE_ORDER, CLAIM_TYPE_LABELS } from '@/lib/claims/claimTypes'
+import StationDistanceField from '@/components/distance/StationDistanceField'
+import RecallLegDistanceField from '@/components/distance/RecallLegDistanceField'
+import { parseAndResolve } from '@/lib/distance/stationParser'
 import {
   calcRecallClaim,
   calcRetainClaim,
@@ -30,7 +33,6 @@ import {
   roundMoney,
 } from '@/lib/calculations/engine'
 import { fat } from '@/lib/supabaseClient'
-import StationDistanceField from '@/components/distance/StationDistanceField'
 
 // ─── Shared styles ────────────────────────────────────────────────────────────
 
@@ -179,11 +181,35 @@ function AdjustedAmountField({ calculatedAmount, adjustedAmount, onChange }) {
 
 // ─── Sub-form: Recall ─────────────────────────────────────────────────────────
 
-function RecallInputs({ values, onChange, profile, profileLoading, userId }) {
+function RecallInputs({ values, onChange, profile, profileLoading, userId, stations }) {
   const rosterLabel = profile?.stationLabel || ''
+
+  // Home → rostered-station leg: uses the profile station + cached home address.
   const station = profile?.stationId
     ? { id: profile.stationId, name: profile.stationName || profile.stationLabel || '', abbreviation: 'FS' + profile.stationId }
     : null
+
+  // Rostered → recall-station leg: resolve free-text inputs against fat.stations.
+  // The rostered station defaults to the profile station but can be edited; the
+  // recall station is always typed. Both feed RecallLegDistanceField for the
+  // second-leg auto distance. If either is unresolvable, the field falls back
+  // to a manual numeric input (existing behaviour preserved).
+  const rosterStation = (() => {
+    const parsed = parseAndResolve(values.rosteredStn, stations)
+    if (parsed) return parsed
+    if (profile?.stationId) {
+      return {
+        id:           profile.stationId,
+        name:         (profile.stationLabel || '').replace(/^FS\d+\s*[-–—]\s*/i, '').trim() || null,
+        abbreviation: `FS${profile.stationId}`,
+        label:        profile.stationLabel || `FS${profile.stationId}`,
+      }
+    }
+    return null
+  })()
+
+  const recallStation = parseAndResolve(values.recallStn, stations)
+
   return (
     <>
       <div style={{
@@ -220,14 +246,13 @@ function RecallInputs({ values, onChange, profile, profileLoading, userId }) {
         onChange={(v) => onChange('distHomeKm', v)}
       />
 
-      <div style={FIELD}>
-        <label style={LABEL_STYLE}>Rostered to Recall Station (one way, km)</label>
-        <input type="number" min="0" step="0.1" placeholder="0.0"
-          value={values.distStnKm}
-          onChange={(e) => onChange('distStnKm', e.target.value)}
-          style={INPUT_STYLE} />
-        <p style={HELP_STYLE}>Leave 0 if recalled to your own rostered station.</p>
-      </div>
+      <RecallLegDistanceField
+        userId={userId}
+        originStation={rosterStation}
+        destStation={recallStation}
+        value={values.distStnKm}
+        onChange={(km) => onChange('distStnKm', km)}
+      />
 
       <div style={FIELD}>
         <label style={LABEL_STYLE}>Incident Number</label>
@@ -479,6 +504,7 @@ export default function ClaimForm({ userId, financialYearId, onSuccess, onCancel
   const [error, setError]                   = useState(null)
   const [profile, setProfile]               = useState(null)
   const [profileLoading, setProfileLoading] = useState(true)
+  const [stations, setStations]             = useState([])
 
   // Load FAT-specific profile extension for pre-fill
   // Reads from fat.profile_ext (FAT-owned) - not the shared profiles table
@@ -524,6 +550,27 @@ export default function ClaimForm({ userId, financialYearId, onSuccess, onCancel
     })()
     return () => { cancelled = true }
   }, [userId])
+
+  // Load FRV stations list once for free-text recall-station parsing.
+  // Used by RecallLegDistanceField to resolve typed input like "FS44 - Sunshine"
+  // or "Sunshine" into a station ID for the auto-distance flow.
+  useEffect(() => {
+    let cancelled = false
+    fat
+      .from('stations')
+      .select('id, name, abbreviation')
+      .eq('is_active', true)
+      .order('id', { ascending: true })
+      .then(({ data, error: stnErr }) => {
+        if (cancelled) return
+        if (stnErr) {
+          console.warn('[ClaimForm] Stations fetch error:', stnErr)
+          return
+        }
+        if (data) setStations(data)
+      })
+    return () => { cancelled = true }
+  }, [])
 
   // Reset fields when type or profile changes.
   // Note: date is intentionally NOT reset here - it stays as today's date
@@ -702,7 +749,7 @@ export default function ClaimForm({ userId, financialYearId, onSuccess, onCancel
           style={{ ...INPUT_STYLE, colorScheme: 'dark' }} />
       </div>
 
-      {claimType === 'recalls'      && <RecallInputs values={fields} onChange={handleFieldChange} profile={profile} profileLoading={profileLoading} userId={userId} />}
+      {claimType === 'recalls'      && <RecallInputs values={fields} onChange={handleFieldChange} profile={profile} profileLoading={profileLoading} userId={userId} stations={stations} />}
       {claimType === 'retain'       && <RetainInputs  values={fields} onChange={handleFieldChange} />}
       {claimType === 'standby'      && <StandbyInputs values={fields} onChange={handleFieldChange} nightMealEligible={nightMealEligible} />}
       {(claimType === 'spoilt' || claimType === 'delayed_meal') && (
