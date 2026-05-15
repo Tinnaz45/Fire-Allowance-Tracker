@@ -64,9 +64,10 @@ function resolveChildLabel(claim) {
 function StatusBadge({ status }) {
   const lower = (status || '').toLowerCase()
   const map = {
-    paid:     { background: 'rgba(34,197,94,0.15)',  border: '1px solid rgba(34,197,94,0.4)',  color: '#4ade80' },
-    pending:  { background: 'rgba(234,179,8,0.15)',  border: '1px solid rgba(234,179,8,0.4)',  color: '#facc15' },
-    disputed: { background: 'rgba(239,68,68,0.15)',  border: '1px solid rgba(239,68,68,0.4)',  color: '#f87171' },
+    paid:             { background: 'rgba(34,197,94,0.15)',  border: '1px solid rgba(34,197,94,0.4)',  color: '#4ade80' },
+    pending:          { background: 'rgba(234,179,8,0.15)',  border: '1px solid rgba(234,179,8,0.4)',  color: '#facc15' },
+    disputed:         { background: 'rgba(239,68,68,0.15)',  border: '1px solid rgba(239,68,68,0.4)',  color: '#f87171' },
+    'partially paid': { background: 'rgba(99,102,241,0.15)', border: '1px solid rgba(99,102,241,0.4)', color: '#a5b4fc' },
   }
   const style = map[lower] || { background: 'rgba(107,114,128,0.15)', border: '1px solid rgba(107,114,128,0.4)', color: '#9ca3af' }
   return (
@@ -143,7 +144,8 @@ function PaymentMethodBadge({ method }) {
 
 function ProgressPill({ paid, total }) {
   if (total === 0) return null
-  const allPaid = paid === total
+  const allPaid  = paid === total
+  const partial  = paid > 0 && paid < total
   return (
     <span style={{
       display: 'inline-flex',
@@ -155,9 +157,9 @@ function ProgressPill({ paid, total }) {
       fontWeight: 700,
       letterSpacing: '0.02em',
       flexShrink: 0,
-      background: allPaid ? 'rgba(34,197,94,0.12)' : 'rgba(234,179,8,0.08)',
-      border: allPaid ? '1px solid rgba(34,197,94,0.35)' : '1px solid rgba(234,179,8,0.25)',
-      color: allPaid ? '#86efac' : '#fde68a',
+      background: allPaid ? 'rgba(34,197,94,0.12)' : partial ? 'rgba(99,102,241,0.1)' : 'rgba(234,179,8,0.08)',
+      border:     allPaid ? '1px solid rgba(34,197,94,0.35)' : partial ? '1px solid rgba(99,102,241,0.35)' : '1px solid rgba(234,179,8,0.25)',
+      color:      allPaid ? '#86efac' : partial ? '#a5b4fc' : '#fde68a',
     }}>
       {paid}/{total} paid
     </span>
@@ -165,30 +167,36 @@ function ProgressPill({ paid, total }) {
 }
 
 // ─── QuickPayToggle ────────────────────────────────────────────────────────────
-// One-click toggle per sub-claim. Updates payment_status + payment_date.
-// Only shown when claim.payment_status is non-null (Phase 2 rows).
+// One-click "Mark Paid" per unpaid sub-claim. Updates payment_status + payment_date.
+// Only visible for unpaid subclaims (payment_status null or 'Pending').
+// Treats null payment_status as 'Pending' — shows button for all new claims.
+// Rolls back optimistically on error and shows retry state.
 
 function QuickPayToggle({ claim, session, activeFY }) {
   const { updatePaymentStatus } = useClaims()
   const [toggling, setToggling] = useState(false)
-
-  if (claim.payment_status == null) return null
+  const [hasError, setHasError] = useState(false)
 
   const isPaid = (claim.payment_status || '').toLowerCase() === 'paid'
 
-  const handleToggle = async (e) => {
+  // Only visible for unpaid subclaims
+  if (isPaid) return null
+
+  const handleMarkPaid = async (e) => {
     e.stopPropagation()
     if (toggling || !session) return
     setToggling(true)
+    setHasError(false)
     try {
       await updatePaymentStatus({
         userId: session.user.id,
         claim,
-        paymentStatus: isPaid ? 'Pending' : 'Paid',
+        paymentStatus: 'Paid',
         financialYearId: activeFY?.id || null,
       })
     } catch (err) {
       console.error('[QuickPayToggle]', err)
+      setHasError(true)
     } finally {
       setToggling(false)
     }
@@ -196,19 +204,15 @@ function QuickPayToggle({ claim, session, activeFY }) {
 
   return (
     <button
-      onClick={handleToggle}
+      onClick={handleMarkPaid}
       disabled={toggling}
-      title={isPaid ? 'Revert to Pending' : 'Mark as Paid'}
+      title="Mark as Paid"
       style={{
         padding: '3px 10px',
         borderRadius: '6px',
-        border: isPaid
-          ? '1px solid rgba(234,179,8,0.35)'
-          : '1px solid rgba(34,197,94,0.4)',
-        background: isPaid
-          ? 'rgba(234,179,8,0.08)'
-          : 'rgba(34,197,94,0.1)',
-        color: isPaid ? '#fde68a' : '#86efac',
+        border: hasError ? '1px solid rgba(239,68,68,0.5)' : '1px solid rgba(34,197,94,0.4)',
+        background: hasError ? 'rgba(239,68,68,0.1)' : 'rgba(34,197,94,0.1)',
+        color: hasError ? '#f87171' : '#86efac',
         fontSize: '0.7rem',
         fontWeight: 700,
         cursor: toggling ? 'wait' : 'pointer',
@@ -221,7 +225,7 @@ function QuickPayToggle({ claim, session, activeFY }) {
         whiteSpace: 'nowrap',
       }}
     >
-      {toggling ? '…' : isPaid ? '↩ Undo' : '⚡ Pay'}
+      {toggling ? '…' : hasError ? '✕ Retry' : 'Mark Paid'}
     </button>
   )
 }
@@ -333,9 +337,10 @@ function ExpandableGroupRow({ groupEntry, onEdit, session, activeFY }) {
 
   const totalAmt = children.reduce((sum, c) => sum + resolveComponentAmount(c), 0)
 
-  // Overdue check: use derivedPaymentStatus as canonical truth, not parent_status
+  // Overdue check: pending or partially-paid groups can be overdue
   const isOverdue = (() => {
-    if ((derivedPaymentStatus || '').toLowerCase() !== 'pending') return false
+    const lower = (derivedPaymentStatus || '').toLowerCase()
+    if (lower !== 'pending' && lower !== 'partially paid') return false
     if (!group.overdue_at) return false
     return new Date() > new Date(group.overdue_at)
   })()
@@ -692,11 +697,12 @@ export default function ExpandableClaimList({
   // ── Overdue banner count ──────────────────────────────────────────────────
   // NORMALIZED: use derivedPaymentStatus for grouped overdue detection
 
-  const overdueGroupCount = sortedGroups.filter((g) =>
-    (g.derivedPaymentStatus || '').toLowerCase() === 'pending' &&
-    g.group.overdue_at &&
-    new Date() > new Date(g.group.overdue_at)
-  ).length
+  const overdueGroupCount = sortedGroups.filter((g) => {
+    const lower = (g.derivedPaymentStatus || '').toLowerCase()
+    return (lower === 'pending' || lower === 'partially paid') &&
+      g.group.overdue_at &&
+      new Date() > new Date(g.group.overdue_at)
+  }).length
 
   const overdueUngroupedCount = sortedUngrouped.filter(isClaimOverdue).length
   const totalOverdue = overdueGroupCount + overdueUngroupedCount
@@ -788,4 +794,14 @@ export default function ExpandableClaimList({
         alignItems: 'center',
         fontSize: '0.78rem',
         color: '#6b7280',
-        flexWrap: 'w
+        flexWrap: 'wrap',
+        gap: '6px',
+      }}>
+        <span>{itemCount} claim{itemCount !== 1 ? 's' : ''}</span>
+        <span style={{ fontVariantNumeric: 'tabular-nums', color: '#9ca3af', fontWeight: 600 }}>
+          Total: ${grandTotal.toFixed(2)}
+        </span>
+      </div>
+    </div>
+  )
+}

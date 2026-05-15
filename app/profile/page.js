@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabaseClient'
 import AppShell from '@/components/nav/AppShell'
+import { markAllDistancesStale, normaliseAddress } from '@/lib/distance/addressCache'
 
 const S = {
   inner: { maxWidth: '560px', margin: '0 auto', padding: '32px 16px', boxSizing: 'border-box' },
@@ -32,10 +33,12 @@ export default function ProfilePage() {
   const [firstName, setFirstName] = useState('')
   const [lastName, setLastName] = useState('')
   const [homeAddress, setHomeAddress] = useState('')
+  const [originalHomeAddress, setOriginalHomeAddress] = useState('')
   const [platoon, setPlatoon] = useState('')
   const [payNumber, setPayNumber] = useState('')
   const [stationId, setStationId] = useState('')
   const [stationName, setStationName] = useState('')
+  const [homeDistKm, setHomeDistKm] = useState(null)
   const [stationSearch, setStationSearch] = useState('')
   const [stations, setStations] = useState([])
   const [showStationPicker, setShowStationPicker] = useState(false)
@@ -68,15 +71,17 @@ export default function ProfilePage() {
         // Load FAT-specific profile extension
         const { data: ext } = await supabase
           .from('fat_profile_ext')
-          .select('home_address, platoon, pay_number, station_id, rostered_station_label')
+          .select('home_address, platoon, pay_number, station_id, rostered_station_label, home_dist_km')
           .eq('user_id', session.user.id)
           .maybeSingle()
         if (ext) {
           setHomeAddress(ext.home_address || '')
+          setOriginalHomeAddress(ext.home_address || '')
           setPlatoon(ext.platoon || '')
           setPayNumber(ext.pay_number || '')
           setStationId(ext.station_id ? String(ext.station_id) : '')
           setStationName(ext.rostered_station_label || '')
+          setHomeDistKm(ext.home_dist_km != null ? Number(ext.home_dist_km) : null)
         }
         // Load stations from FAT-owned fat_stations table
         const { data: stns } = await supabase
@@ -124,7 +129,15 @@ export default function ProfilePage() {
       }, { onConflict: 'user_id' })
       if (extError) throw extError
 
-      setSuccessMsg('Profile saved successfully.')
+      const addressChanged =
+        normaliseAddress(homeAddress) !== normaliseAddress(originalHomeAddress)
+      if (addressChanged && originalHomeAddress) {
+        await markAllDistancesStale(session.user.id, 'home_address_changed')
+        setSuccessMsg('Profile saved. Station distances have been marked for re-confirmation on your next Recall claim.')
+      } else {
+        setSuccessMsg('Profile saved successfully.')
+      }
+      setOriginalHomeAddress(homeAddress)
       setTimeout(() => setSuccessMsg(null), 4000)
     } catch (err) {
       setErrorMsg(err.message || 'Failed to save profile.')
@@ -143,6 +156,8 @@ export default function ProfilePage() {
   if (!session) return null
 
   const activeStationLabel = stationId ? (stationName ? `FS${stationId} - ${stationName}` : `FS${stationId}`) : null
+  const validDistance = activeStationLabel && typeof homeDistKm === 'number' && Number.isFinite(homeDistKm) && homeDistKm > 0 ? homeDistKm : null
+  const fmtKm = (n) => (n % 1 === 0 ? n.toFixed(0) : n.toFixed(1))
 
   return (
     <AppShell>
@@ -179,7 +194,16 @@ export default function ProfilePage() {
             <h2 style={S.cardTitle}>Operational Details</h2>
             <div style={S.field}>
               <label style={S.label}>Rostered Station</label>
-              {activeStationLabel && <div style={S.stationBadge}>{activeStationLabel}</div>}
+              {activeStationLabel && (
+                <div style={S.stationBadge}>
+                  {activeStationLabel}
+                  {validDistance && (
+                    <span style={{ marginLeft: '6px', fontWeight: 500, color: 'rgba(252,165,165,0.65)' }}>
+                      ({fmtKm(validDistance)} km / {fmtKm(validDistance * 2)} km)
+                    </span>
+                  )}
+                </div>
+              )}
               <div style={{ marginTop: activeStationLabel ? '10px' : '0' }}>
                 <input
                   type="text"
@@ -231,7 +255,7 @@ export default function ProfilePage() {
               <div style={S.note}>Changing your address only affects future claims. Existing claims retain the address used at creation.</div>
             </div>
             <div style={{ marginTop: '4px', padding: '10px 14px', background: '#111', border: '1px solid #2a2a2a', borderRadius: '8px', fontSize: '0.8rem', color: '#6b7280' }}>
-              Distance is currently entered manually on each claim. Google Maps auto-calculation will be available when NEXT_PUBLIC_GOOGLE_MAPS_API_KEY is configured.
+              Recall claims auto-estimate the home-to-station distance using OpenStreetMap. You can accept the estimate or override it manually on each claim, and confirmed values are cached for next time.
             </div>
           </div>
 
