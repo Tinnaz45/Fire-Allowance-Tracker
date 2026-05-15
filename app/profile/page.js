@@ -3,7 +3,7 @@
 // Profile Page
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { supabase } from '@/lib/supabaseClient'
+import { supabase, fat } from '@/lib/supabaseClient'
 import AppShell from '@/components/nav/AppShell'
 import { markAllDistancesStale, normaliseAddress } from '@/lib/distance/addressCache'
 
@@ -69,8 +69,8 @@ export default function ProfilePage() {
           setLastName(profile.last_name || '')
         }
         // Load FAT-specific profile extension
-        const { data: ext } = await supabase
-          .from('fat_profile_ext')
+        const { data: ext } = await fat
+          .from('profile_ext')
           .select('home_address, platoon, pay_number, station_id, rostered_station_label, home_dist_km')
           .eq('user_id', session.user.id)
           .maybeSingle()
@@ -83,9 +83,9 @@ export default function ProfilePage() {
           setStationName(ext.rostered_station_label || '')
           setHomeDistKm(ext.home_dist_km != null ? Number(ext.home_dist_km) : null)
         }
-        // Load stations from FAT-owned fat_stations table
-        const { data: stns } = await supabase
-          .from('fat_stations')
+        // Load stations from FAT-owned fat.stations table
+        const { data: stns } = await fat
+          .from('stations')
           .select('id, name, abbreviation')
           .eq('is_active', true)
           .order('id', { ascending: true })
@@ -119,7 +119,7 @@ export default function ProfilePage() {
       }, { onConflict: 'id' })
       if (profileError) throw profileError
 
-      const { error: extError } = await supabase.from('fat_profile_ext').upsert({
+      const { error: extError } = await fat.from('profile_ext').upsert({
         user_id:                session.user.id,
         home_address:           homeAddress.trim(),
         platoon:                platoon || null,

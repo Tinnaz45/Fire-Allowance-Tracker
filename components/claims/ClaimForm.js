@@ -29,7 +29,7 @@ import {
   buildCalcSnapshot,
   roundMoney,
 } from '@/lib/calculations/engine'
-import { supabase } from '@/lib/supabaseClient'
+import { fat } from '@/lib/supabaseClient'
 import StationDistanceField from '@/components/distance/StationDistanceField'
 
 // ─── Shared styles ────────────────────────────────────────────────────────────
@@ -481,7 +481,7 @@ export default function ClaimForm({ userId, financialYearId, onSuccess, onCancel
   const [profileLoading, setProfileLoading] = useState(true)
 
   // Load FAT-specific profile extension for pre-fill
-  // Reads from fat_profile_ext (FAT-owned) - not the shared profiles table
+  // Reads from fat.profile_ext (FAT-owned) - not the shared profiles table
   useEffect(() => {
     if (!userId) {
       setProfileLoading(false)
@@ -490,8 +490,8 @@ export default function ClaimForm({ userId, financialYearId, onSuccess, onCancel
     let cancelled = false
     setProfileLoading(true)
     ;(async () => {
-      const { data: ext } = await supabase
-        .from('fat_profile_ext')
+      const { data: ext } = await fat
+        .from('profile_ext')
         .select('station_id, rostered_station_label, home_dist_km, home_address, platoon')
         .eq('user_id', userId)
         .maybeSingle()
@@ -499,8 +499,8 @@ export default function ClaimForm({ userId, financialYearId, onSuccess, onCancel
 
       let stationName = ''
       if (ext?.station_id) {
-        const { data: stn } = await supabase
-          .from('fat_stations')
+        const { data: stn } = await fat
+          .from('stations')
           .select('name')
           .eq('id', ext.station_id)
           .maybeSingle()
