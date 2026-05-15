@@ -13,6 +13,8 @@ import GroupedClaimList from '@/components/claims/GroupedClaimList'
 import AppShell from '@/components/nav/AppShell'
 import RecentActivitySection from '@/components/dashboard/RecentActivitySection'
 import ReconciliationSummary from '@/components/dashboard/ReconciliationSummary'
+import FriendPickerModal from '@/components/friends/FriendPickerModal'
+import IncomingDraftsBanner from '@/components/friends/IncomingDraftsBanner'
 
 // ─── Shared input styles ──────────────────────────────────────────────────────
 
@@ -352,6 +354,9 @@ export default function HomePage() {
   const [showNewClaimModal, setShowNewClaimModal] = useState(false)
   const [editingClaim, setEditingClaim] = useState(null)
   const [successMessage, setSuccessMessage] = useState(null)
+  // After a claim is created, optionally pop the friend-picker so the user
+  // can replicate it as independent drafts to selected friends.
+  const [pickerForClaim, setPickerForClaim] = useState(null)
 
   // activeTab: 'all' | 'pending' | 'paid' | 'payslip' | 'petty-cash'
   const [activeTab, setActiveTab] = useState('all')
@@ -400,10 +405,15 @@ export default function HomePage() {
 
   // ── Handlers ──────────────────────────────────────────────────────────────
 
-  const handleClaimSuccess = () => {
+  const handleClaimSuccess = (result) => {
     setShowNewClaimModal(false)
     setSuccessMessage('Claim saved successfully!')
     setTimeout(() => setSuccessMessage(null), 4000)
+    // Offer to share an independent draft copy with friends. Only fires when
+    // the new claim was actually persisted (we need its id + table).
+    if (result?.claimId && result?.claimTable) {
+      setPickerForClaim({ sourceTable: result.claimTable, sourceClaimId: result.claimId })
+    }
   }
 
   const handleEditSuccess = () => {
@@ -523,6 +533,9 @@ export default function HomePage() {
               ✓ {successMessage}
             </div>
           )}
+
+          {/* ── Incoming draft claims from friends ── */}
+          <IncomingDraftsBanner />
 
           {/* ── Reconciliation Summary (Phase 4) ── */}
           <ReconciliationSummary />
@@ -746,6 +759,16 @@ export default function HomePage() {
             activeFY={activeFY}
             onClose={() => setEditingClaim(null)}
             onSuccess={handleEditSuccess}
+          />
+        )}
+
+        {/* ── Friend-share picker (post-create) ── */}
+        {pickerForClaim && (
+          <FriendPickerModal
+            sourceTable={pickerForClaim.sourceTable}
+            sourceClaimId={pickerForClaim.sourceClaimId}
+            onClose={() => setPickerForClaim(null)}
+            onDone={() => setPickerForClaim(null)}
           />
         )}
       </div>

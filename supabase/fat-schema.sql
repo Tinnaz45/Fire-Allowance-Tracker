@@ -397,6 +397,80 @@ create policy service_role_manage on fat.stations for all
   using (auth.role() = 'service_role') with check (auth.role() = 'service_role');
 
 
+-- ─── Friend system (additive, isolated from claims domain) ────────────────────
+-- See docs/FRIEND_REPLICATION_ARCHITECTURE.md for the full design.
+-- All mutations go through SECURITY DEFINER RPCs — clients have no direct
+-- write access to friend_requests, friendships, or claim_replication_events.
+
+create table if not exists fat.friend_requests (
+  id                 uuid primary key default gen_random_uuid(),
+  sender_user_id     uuid not null references auth.users(id) on delete cascade,
+  recipient_user_id  uuid not null references auth.users(id) on delete cascade,
+  status             text not null default 'pending'
+                       check (status in ('pending','accepted','rejected','cancelled')),
+  created_at         timestamptz not null default now(),
+  responded_at       timestamptz,
+  constraint friend_requests_no_self check (sender_user_id <> recipient_user_id)
+);
+
+create unique index if not exists friend_requests_pending_unique
+  on fat.friend_requests (sender_user_id, recipient_user_id)
+  where status = 'pending';
+
+create index if not exists friend_requests_recipient_idx
+  on fat.friend_requests (recipient_user_id, status);
+create index if not exists friend_requests_sender_idx
+  on fat.friend_requests (sender_user_id, status);
+
+
+create table if not exists fat.friendships (
+  id              uuid primary key default gen_random_uuid(),
+  user_id         uuid not null references auth.users(id) on delete cascade,
+  friend_user_id  uuid not null references auth.users(id) on delete cascade,
+  created_at      timestamptz not null default now(),
+  constraint friendships_no_self check (user_id <> friend_user_id),
+  unique (user_id, friend_user_id)
+);
+
+create index if not exists friendships_user_idx on fat.friendships (user_id);
+
+
+-- Audit-only. Never used for live syncing — replicated claims are independent.
+create table if not exists fat.claim_replication_events (
+  id                     uuid primary key default gen_random_uuid(),
+  source_claim_table     text not null
+                          check (source_claim_table in ('recalls','retain','standby','spoilt_meals')),
+  source_claim_id        uuid not null,
+  source_user_id         uuid not null references auth.users(id) on delete cascade,
+  recipient_user_id      uuid not null references auth.users(id) on delete cascade,
+  replicated_claim_id    uuid not null,
+  replicated_claim_table text not null,
+  claim_type             text not null,
+  created_at             timestamptz not null default now(),
+  seen_at                timestamptz
+);
+
+create index if not exists replication_events_recipient_idx
+  on fat.claim_replication_events (recipient_user_id, seen_at, created_at desc);
+create index if not exists replication_events_source_idx
+  on fat.claim_replication_events (source_user_id, created_at desc);
+
+alter table fat.friend_requests          enable row level security;
+alter table fat.friendships              enable row level security;
+alter table fat.claim_replication_events enable row level security;
+
+create policy requests_select_own on fat.friend_requests
+  for select using (auth.uid() = sender_user_id or auth.uid() = recipient_user_id);
+create policy friendships_select_own on fat.friendships
+  for select using (auth.uid() = user_id);
+create policy replication_events_select_own on fat.claim_replication_events
+  for select using (auth.uid() = source_user_id or auth.uid() = recipient_user_id);
+
+-- Friend / replication RPCs are deployed via migration
+-- fat_friends_and_claim_replication. See docs/FRIEND_REPLICATION_ARCHITECTURE.md
+-- for the canonical RPC list and contracts.
+
+
 -- ─── Final grants ─────────────────────────────────────────────────────────────
 
 grant select, insert, update, delete on all tables    in schema fat to authenticated;

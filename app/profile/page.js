@@ -170,6 +170,19 @@ export default function ProfilePage() {
         {successMsg && <div style={S.success}>&#10003; {successMsg}</div>}
         {errorMsg && <div style={S.error}>{errorMsg}</div>}
 
+        <a href="/friends" style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          ...S.card, marginBottom: '20px', textDecoration: 'none', cursor: 'pointer',
+        }}>
+          <div>
+            <div style={{ fontSize: '0.95rem', fontWeight: 700, color: '#f9fafb' }}>Friends</div>
+            <div style={{ fontSize: '0.8rem', color: '#6b7280', marginTop: '2px' }}>
+              Manage friend requests · send draft claims
+            </div>
+          </div>
+          <div style={{ color: '#6b7280', fontSize: '1.1rem' }}>›</div>
+        </a>
+
         <form onSubmit={handleSave} noValidate>
           <div style={S.card}>
             <h2 style={S.cardTitle}>Personal Details</h2>

@@ -702,7 +702,7 @@ export default function ClaimForm({ userId, financialYearId, onSuccess, onCancel
 
     setSubmitting(true)
     try {
-      await addClaim({
+      const result = await addClaim({
         userId,
         claimType,
         date,
@@ -711,7 +711,7 @@ export default function ClaimForm({ userId, financialYearId, onSuccess, onCancel
         rates,
         financialYearId: financialYearId || null,
       })
-      onSuccess?.()
+      onSuccess?.(result)
     } catch (err) {
       console.error('[ClaimForm] Submit error:', err)
       setError(err.message || 'Failed to create claim. Please try again.')
