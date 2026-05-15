@@ -30,6 +30,7 @@ import {
   roundMoney,
 } from '@/lib/calculations/engine'
 import { supabase } from '@/lib/supabaseClient'
+import StationDistanceField from '@/components/distance/StationDistanceField'
 
 // ─── Shared styles ────────────────────────────────────────────────────────────
 
@@ -178,8 +179,11 @@ function AdjustedAmountField({ calculatedAmount, adjustedAmount, onChange }) {
 
 // ─── Sub-form: Recall ─────────────────────────────────────────────────────────
 
-function RecallInputs({ values, onChange, profile }) {
+function RecallInputs({ values, onChange, profile, profileLoading, userId }) {
   const rosterLabel = profile?.stationLabel || ''
+  const station = profile?.stationId
+    ? { id: profile.stationId, name: profile.stationName || profile.stationLabel || '', abbreviation: 'FS' + profile.stationId }
+    : null
   return (
     <>
       <div style={{
@@ -207,14 +211,14 @@ function RecallInputs({ values, onChange, profile }) {
           placeholder="e.g. FS44 - Sunshine" style={INPUT_STYLE} />
       </div>
 
-      <div style={FIELD}>
-        <label style={LABEL_STYLE}>Home to Rostered Station (one way, km)</label>
-        <input type="number" min="0" step="0.1" placeholder="0.0"
-          value={values.distHomeKm}
-          onChange={(e) => onChange('distHomeKm', e.target.value)}
-          style={INPUT_STYLE} />
-        <p style={HELP_STYLE}>One-way distance. Return leg is automatic (x2). Total route = (this x2) + (station-to-station x2).</p>
-      </div>
+      <StationDistanceField
+        userId={userId}
+        station={station}
+        homeAddress={profile?.homeAddress || ''}
+        profileLoading={profileLoading}
+        value={values.distHomeKm}
+        onChange={(v) => onChange('distHomeKm', v)}
+      />
 
       <div style={FIELD}>
         <label style={LABEL_STYLE}>Rostered to Recall Station (one way, km)</label>
@@ -474,27 +478,51 @@ export default function ClaimForm({ userId, financialYearId, onSuccess, onCancel
   const [submitting, setSubmitting]         = useState(false)
   const [error, setError]                   = useState(null)
   const [profile, setProfile]               = useState(null)
+  const [profileLoading, setProfileLoading] = useState(true)
 
   // Load FAT-specific profile extension for pre-fill
   // Reads from fat_profile_ext (FAT-owned) - not the shared profiles table
   useEffect(() => {
-    if (!userId) return
-    supabase
-      .from('fat_profile_ext')
-      .select('station_id, rostered_station_label, home_dist_km, home_address, platoon')
-      .eq('user_id', userId)
-      .maybeSingle()
-      .then(({ data }) => {
-        if (data) {
-          setProfile({
-            stationId:    data.station_id,
-            stationLabel: data.rostered_station_label || (data.station_id ? 'FS' + data.station_id : ''),
-            homeDistKm:   data.home_dist_km || 0,
-            homeAddress:  data.home_address || '',
-            platoon:      data.platoon || '',
-          })
-        }
-      })
+    if (!userId) {
+      setProfileLoading(false)
+      return
+    }
+    let cancelled = false
+    setProfileLoading(true)
+    ;(async () => {
+      const { data: ext } = await supabase
+        .from('fat_profile_ext')
+        .select('station_id, rostered_station_label, home_dist_km, home_address, platoon')
+        .eq('user_id', userId)
+        .maybeSingle()
+      if (cancelled) return
+
+      let stationName = ''
+      if (ext?.station_id) {
+        const { data: stn } = await supabase
+          .from('fat_stations')
+          .select('name')
+          .eq('id', ext.station_id)
+          .maybeSingle()
+        if (cancelled) return
+        stationName = stn?.name || ''
+      }
+
+      if (ext) {
+        setProfile({
+          stationId:    ext.station_id,
+          stationName,
+          stationLabel: ext.rostered_station_label || (ext.station_id ? 'FS' + ext.station_id : ''),
+          homeDistKm:   ext.home_dist_km || 0,
+          homeAddress:  ext.home_address || '',
+          platoon:      ext.platoon || '',
+        })
+      } else {
+        setProfile({ stationId: null, stationName: '', stationLabel: '', homeDistKm: 0, homeAddress: '', platoon: '' })
+      }
+      setProfileLoading(false)
+    })()
+    return () => { cancelled = true }
   }, [userId])
 
   // Reset fields when type or profile changes.
@@ -674,7 +702,7 @@ export default function ClaimForm({ userId, financialYearId, onSuccess, onCancel
           style={{ ...INPUT_STYLE, colorScheme: 'dark' }} />
       </div>
 
-      {claimType === 'recalls'      && <RecallInputs values={fields} onChange={handleFieldChange} profile={profile} />}
+      {claimType === 'recalls'      && <RecallInputs values={fields} onChange={handleFieldChange} profile={profile} profileLoading={profileLoading} userId={userId} />}
       {claimType === 'retain'       && <RetainInputs  values={fields} onChange={handleFieldChange} />}
       {claimType === 'standby'      && <StandbyInputs values={fields} onChange={handleFieldChange} nightMealEligible={nightMealEligible} />}
       {(claimType === 'spoilt' || claimType === 'delayed_meal') && (

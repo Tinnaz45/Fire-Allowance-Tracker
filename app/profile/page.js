@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabaseClient'
 import AppShell from '@/components/nav/AppShell'
+import { markAllDistancesStale, normaliseAddress } from '@/lib/distance/addressCache'
 
 const S = {
   inner: { maxWidth: '560px', margin: '0 auto', padding: '32px 16px', boxSizing: 'border-box' },
@@ -32,6 +33,7 @@ export default function ProfilePage() {
   const [firstName, setFirstName] = useState('')
   const [lastName, setLastName] = useState('')
   const [homeAddress, setHomeAddress] = useState('')
+  const [originalHomeAddress, setOriginalHomeAddress] = useState('')
   const [platoon, setPlatoon] = useState('')
   const [payNumber, setPayNumber] = useState('')
   const [stationId, setStationId] = useState('')
@@ -73,6 +75,7 @@ export default function ProfilePage() {
           .maybeSingle()
         if (ext) {
           setHomeAddress(ext.home_address || '')
+          setOriginalHomeAddress(ext.home_address || '')
           setPlatoon(ext.platoon || '')
           setPayNumber(ext.pay_number || '')
           setStationId(ext.station_id ? String(ext.station_id) : '')
@@ -124,7 +127,15 @@ export default function ProfilePage() {
       }, { onConflict: 'user_id' })
       if (extError) throw extError
 
-      setSuccessMsg('Profile saved successfully.')
+      const addressChanged =
+        normaliseAddress(homeAddress) !== normaliseAddress(originalHomeAddress)
+      if (addressChanged && originalHomeAddress) {
+        await markAllDistancesStale(session.user.id, 'home_address_changed')
+        setSuccessMsg('Profile saved. Station distances have been marked for re-confirmation on your next Recall claim.')
+      } else {
+        setSuccessMsg('Profile saved successfully.')
+      }
+      setOriginalHomeAddress(homeAddress)
       setTimeout(() => setSuccessMsg(null), 4000)
     } catch (err) {
       setErrorMsg(err.message || 'Failed to save profile.')
@@ -231,7 +242,7 @@ export default function ProfilePage() {
               <div style={S.note}>Changing your address only affects future claims. Existing claims retain the address used at creation.</div>
             </div>
             <div style={{ marginTop: '4px', padding: '10px 14px', background: '#111', border: '1px solid #2a2a2a', borderRadius: '8px', fontSize: '0.8rem', color: '#6b7280' }}>
-              Distance is currently entered manually on each claim. Google Maps auto-calculation will be available when NEXT_PUBLIC_GOOGLE_MAPS_API_KEY is configured.
+              Recall claims auto-estimate the home-to-station distance using OpenStreetMap. You can accept the estimate or override it manually on each claim, and confirmed values are cached for next time.
             </div>
           </div>
 
