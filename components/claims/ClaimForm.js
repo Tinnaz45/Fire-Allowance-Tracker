@@ -29,7 +29,7 @@ import {
   buildCalcSnapshot,
   roundMoney,
 } from '@/lib/calculations/engine'
-import { supabase } from '@/lib/supabaseClient'
+import { fat } from '@/lib/supabaseClient'
 
 // ─── Shared styles ────────────────────────────────────────────────────────────
 
@@ -476,11 +476,11 @@ export default function ClaimForm({ userId, financialYearId, onSuccess, onCancel
   const [profile, setProfile]               = useState(null)
 
   // Load FAT-specific profile extension for pre-fill
-  // Reads from fat_profile_ext (FAT-owned) - not the shared profiles table
+  // Reads from fat.profile_ext (FAT-owned) - not the shared profiles table
   useEffect(() => {
     if (!userId) return
-    supabase
-      .from('fat_profile_ext')
+    fat
+      .from('profile_ext')
       .select('station_id, rostered_station_label, home_dist_km, home_address, platoon')
       .eq('user_id', userId)
       .maybeSingle()
